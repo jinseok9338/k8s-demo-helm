@@ -1,0 +1,10 @@
+# Environment variables
+.env
+*.env.*
+!*.env.example
+!*.env.production
+
+# Application specific env files
+applications/*/.env
+applications/*/.env.*
+!applications/*/.env.example 

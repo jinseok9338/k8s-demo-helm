@@ -1,0 +1,18 @@
+{{- if .Values.ingressRoute.enabled -}}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "user-frontend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "user-frontend.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web # Assuming the default Traefik entrypoint is 'web'
+  routes:
+    - match: PathPrefix(`{{ .Values.ingressRoute.pathPrefix }}`)
+      kind: Rule
+      services:
+        - name: {{ include "user-frontend.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }} 

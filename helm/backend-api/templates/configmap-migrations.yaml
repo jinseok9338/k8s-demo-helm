@@ -1,0 +1,15 @@
+{{- if .Values.migration.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "backend-api.fullname" . }}-migrations
+  labels:
+    {{- include "backend-api.labels" . | nindent 4 }}
+  annotations:
+    # Ensure this CM is created before the migration job
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10" # Lower weight means run earlier
+    "helm.sh/hook-delete-policy": before-hook-creation # Delete previous CM before creating new one
+data:
+{{ (.Files.Glob "migrations/*.sql").AsConfig | indent 2 }}
+{{- end }} 

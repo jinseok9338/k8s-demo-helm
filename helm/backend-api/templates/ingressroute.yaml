@@ -1,0 +1,38 @@
+{{- if .Values.ingressRoute.enabled -}}
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "backend-api.fullname" . }}-strip-prefix
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backend-api.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - {{ .Values.ingressRoute.pathPrefix }}
+    # forceSlash: false # Uncomment if needed
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "backend-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backend-api.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web # Assuming the default Traefik entrypoint is 'web'
+  routes:
+    - match: PathPrefix(`{{ .Values.ingressRoute.pathPrefix }}`)
+      kind: Rule
+      services:
+        - name: {{ include "backend-api.fullname" . }}
+          port: {{ .Values.service.port }}
+      {{- if .Values.ingressRoute.stripPrefix }}
+      middlewares:
+        - name: {{ include "backend-api.fullname" . }}-strip-prefix
+          # namespace is not needed for middleware in the same namespace
+          # namespace: {{ .Release.Namespace }}
+      {{- end }}
+{{- end }} 

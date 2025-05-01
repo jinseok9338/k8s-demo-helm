@@ -1,0 +1,14 @@
+{
+  "bracketSpacing": false,
+  "overrides": [
+    {
+      "files": ["*.yaml", "*.yml"],
+      "options": {
+        "parser": "yaml",
+        "bracketSpacing": false,
+        "singleQuote": false,
+        "proseWrap": "preserve"
+      }
+    }
+  ]
+}
