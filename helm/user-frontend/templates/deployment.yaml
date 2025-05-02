@@ -44,13 +44,17 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: COMPANY_CODE
+              value: {{ .Values.companyCode | quote }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: {{ .Values.service.port }}
               protocol: TCP
-          env:
-            - name: VITE_BACKEND_API_URL
-              value: {{ .Values.backendApiUrl | quote }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             {{- if .Values.livenessProbe.tcpSocket }}

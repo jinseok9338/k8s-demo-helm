@@ -1,0 +1,18 @@
+# Only create Middleware if enabled in values
+{{- if .Values.middleware.stripPrefix.enabled -}}
+---
+
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # Generate a unique name, e.g., backend-dir-backend-api-stripprefix-api
+  name: {{ include "backend-api.fullname" . }}-stripprefix-api 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    # Include standard Helm labels
+    {{- include "backend-api.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+{{- end }} 

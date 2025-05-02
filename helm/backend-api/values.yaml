@@ -2,6 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Company Code (tenant identifier), to be set during deployment for internal logic
+companyCode: ""
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2
 
@@ -11,7 +14,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.1.2"
+  tag: "v0.1.10"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -60,15 +63,16 @@ service:
 
 # IngressRoute settings for Traefik
 ingressRoute:
-  enabled: true
+  enabled: true # Disabled for local testing via port-forward
   # Path prefix for backend API routes
-  pathPrefix: /api
+  # pathPrefix: /api # No longer needed
   # Middleware to strip the prefix before forwarding to the service
-  stripPrefix: true
+  # stripPrefix: true # No longer needed
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: false
+  enabled: true # Keep it enabled conceptually, route created above
+  host: api.localhost # Default host, override per tenant
   className: ""
   annotations:
     {}
@@ -85,17 +89,16 @@ ingress:
   #      - chart-example.local
 
 resources:
-  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: 300m # CPU 0.3 코어 제한
+    memory: 256Mi # 메모리 256 MiB 제한
+  requests:
+    cpu: 100m # CPU 0.1 코어 요청
+    memory: 128Mi # 메모리 128 MiB 요청
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
@@ -106,6 +109,7 @@ readinessProbe:
   httpGet:
     path: /health
     port: http
+  initialDelaySeconds: 15 # Give the app time to initialize DB connection
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -141,19 +145,41 @@ strategy:
     maxUnavailable: 0 # Ensure at least one pod is always available
     maxSurge: 1 # Allow one extra pod during updates
 
-# Database Configuration
-database:
-  # These values should be set during deployment based on the actual PostgreSQL instance
-  host: "be-db-postgresql.base-app.svc.cluster.local" # Updated Kubernetes service name for base-app NS
+# --- NEW: Master Backend URL ---
+masterBackend:
+  url: "http://localhost:3001" # Default for local testing, override as needed
+# --- End NEW ---
+
+# --- NEW: Database Connection Settings (sourced within cluster) ---
+db:
+  # Name of the Kubernetes Service for PostgreSQL
+  serviceName: "postgresql" # Default assumes release name 'db' from bitnami/postgresql
   port: 5432
-  dbName: "backend_db" # Desired database name
-  # Name of the Kubernetes Secret containing database credentials
-  existingSecret: "be-db-postgresql" # Default secret name from Bitnami chart with release name 'be-db'
+  # Database user
+  user: "postgres" # Default Bitnami user
+  # Database name
+  dbName: "postgres" # Default Bitnami database
+  # Name of the Kubernetes Secret holding the database password
+  existingSecret: "postgresql" # Default assumes release name 'db' from bitnami/postgresql
+  # Key within the secret that contains the password
+  secretPasswordKey: "postgres-password" # Default key used by Bitnami chart
+# --- End NEW ---
+
+# --- NEW: Middleware Configuration ---
+middleware:
+  stripPrefix:
+    # If true, the middleware-stripprefix.yaml template will create a StripPrefix Middleware
+    enabled: false
+    # The name is generated automatically using the Helm fullname template + '-stripprefix-api'
+    # Example: If release name is 'backend-dir', middleware name will be 'backend-dir-backend-api-stripprefix-api'
+# --- End NEW ---
 
 # Migration Job Configuration
+# --- DISABLED: Migration handled externally or manually ---
 migration:
-  enabled: true
-  # Image to use for running migrations. Must have psql client or similar.
-  image: postgres:15-alpine # Using official postgres image which includes psql
-  # Path to the directory containing migration SQL files within the chart
-  migrationsPath: "migrations" # Relative path within the chart
+  enabled: false # Disabled
+  # image: postgres:15-alpine
+  # migrationsPath: "migrations"
+# --- End DISABLED ---
+
+# --- REMOVED: PostgreSQL dependency settings no longer needed here ---

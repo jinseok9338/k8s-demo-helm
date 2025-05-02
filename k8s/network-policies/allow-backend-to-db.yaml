@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-db
+  namespace: dir-tenant
+spec:
+  # Apply this policy to backend pods
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: dir-backend-api
+      app.kubernetes.io/name: backend-api
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress traffic TO PostgreSQL pods
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: dir-be-db
+              app.kubernetes.io/name: postgresql
+      # On port 5432/TCP
+      ports:
+        - protocol: TCP
+          port: 5432

@@ -27,8 +27,12 @@ COPY --from=build-stage /app/dist /usr/share/nginx/html
 # We will create this nginx.conf next
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Create a simple script to inject env vars
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port 80
 EXPOSE 80
 
-# Start Nginx when the container launches
-CMD ["nginx", "-g", "daemon off;"] 
+# Use the entrypoint script to inject vars and then start Nginx
+CMD ["/entrypoint.sh"] 

@@ -2,6 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Company Code (tenant identifier), to be set during deployment
+companyCode: "" # No longer needed for ingressRoute
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2
 
@@ -11,7 +14,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.1.2"
+  tag: "v0.1.7"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -61,29 +64,42 @@ service:
 # Backend API URL - No longer needed here when using relative paths via Ingress
 # backendApiUrl: ""
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
-  enabled: false
-  className: ""
-  annotations:
-    {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+# --- REMOVED/MODIFIED: Standard Ingress or previous route settings ---
+# ingress:
+#   enabled: ...
+# ingressRoute:
+#   enabled: false # Previous setting
 
-# IngressRoute settings for Traefik
+# --- NEW: IngressRoute Configuration ---
 ingressRoute:
+  # Set to true during helm install/upgrade to create the IngressRoute
   enabled: true
-  # Path prefix for frontend routes (root path)
-  pathPrefix: /
+
+  # Hostname for this tenant, e.g., app.dir.localhost or app.cha.localhost
+  # MUST be set during helm install/upgrade
+  host: "app.dir.localhost"
+
+  # Traefik entrypoints to use (usually ["web"] for HTTP)
+  entryPoints:
+    - web
+
+  # Configuration for routing /api requests to the backend
+  backend:
+    # Name of the backend-api service (e.g., backend-dir-backend-api)
+    # MUST be set during helm install/upgrade
+    serviceName: "backend-api"
+
+    # Port of the backend-api service
+    port: 3000
+
+    # Name of the StripPrefix Middleware created by the backend-api chart
+    # (e.g., backend-dir-backend-api-stripprefix-api)
+    # MUST be set during helm install/upgrade
+    middlewareName: "backend-api-stripprefix-api"
+
+    # Namespace where the Middleware exists (optional, defaults to current namespace)
+    middlewareNamespace: "dir-tenant"
+# --- End NEW ---
 
 # Explicitly define the update strategy
 strategy:
@@ -93,17 +109,16 @@ strategy:
     maxSurge: 1 # Allow one extra pod during updates
 
 resources:
-  {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: 150m # CPU 0.15 코어 제한
+    memory: 128Mi # 메모리 128 MiB 제한
+  requests:
+    cpu: 50m # CPU 0.05 코어 요청
+    memory: 64Mi # 메모리 64 MiB 요청
 
 # Enable probes using TCP check for Nginx
 livenessProbe:

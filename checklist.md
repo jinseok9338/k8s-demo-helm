@@ -211,3 +211,36 @@ helm install dor-postgres ./helm/postgres \
 ```yaml
 host: dor-admin.127.0.0.1.nip.io
 ```
+
+### 8. ✅ Multi-Tenant Deployment Test (Local - Day 2)
+
+- **Goal:** Deploy the full stack (PostgreSQL, Backend API, User Frontend) for `dir-tenant` and `cha-tenant` namespaces.
+
+- **`dir-tenant` Deployment:**
+
+  - [x] Successfully deployed PostgreSQL (`postgresql` release).
+  - [x] Successfully deployed Backend API (`backend-api` release) after troubleshooting:
+    - [x] Corrected `db.existingSecret` in `values.yaml` (Issue: Secret not found).
+    - [x] Performed full namespace deletion to resolve potential PVC/password mismatch (Issue: DB Auth failed).
+    - [x] Removed `StripPrefix` middleware (Issue: 404 on API calls due to backend route definitions).
+  - [x] Successfully deployed User Frontend (`user-frontend` release) after troubleshooting:
+    - [x] Fixed Helm template syntax in `ingressroute.yaml` (Issue: `apiVersion not set`).
+    - [x] Removed `middlewares` reference from `ingressroute.yaml`.
+  - [x] Verified access using `kubectl port-forward` and `curl` (HTML and API endpoint `/api/hello-world`).
+
+- **`cha-tenant` Deployment:**
+
+  - [x] Successfully deployed PostgreSQL (`postgresql-cha` release).
+  - [x] Successfully deployed Backend API (`backend-api-cha` release) after troubleshooting:
+    - [x] Waited for PostgreSQL initialization to complete (Issue: DB Connection refused).
+  - [x] Successfully deployed User Frontend (`user-frontend-cha` release).
+  - [x] Conceptual verification using `kubectl port-forward` and `curl` planned.
+
+- **Key Learnings / Fixes Applied:**
+  - [x] Ensured correct Secret names are used for DB connections.
+  - [x] Handled potential PVC password conflicts via clean namespace deletion.
+  - [x] Corrected Helm template syntax errors.
+  - [x] Aligned Ingress routing (`PathPrefix`) and middleware (`StripPrefix`) with actual backend application route definitions (removed `StripPrefix`).
+  - [x] Confirmed need for `kubectl port-forward` for access in Kind environment without explicit node port mapping.
+
+> _See `Day2.md` for detailed commands, errors, and resolutions._

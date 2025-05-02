@@ -1,9 +1,0 @@
-primary:
-  resources:
-    limits:
-      ephemeral-storage: 1Gi
-      memory: 500Mi
-    requests:
-      cpu: 100m
-      ephemeral-storage: 50Mi
-      memory: 128Mi

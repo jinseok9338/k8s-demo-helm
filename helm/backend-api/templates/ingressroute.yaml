@@ -1,5 +1,26 @@
 {{- if .Values.ingressRoute.enabled -}}
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "backend-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backend-api.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/api`)
+      kind: Rule
+      services:
+        - name: {{ include "backend-api.fullname" . }}
+          port: {{ .Values.service.port }}
+      # Optional: Add middleware if needed, e.g., for stripping prefix if your app doesn't handle /api
+      # middlewares:
+      #   - name: {{ include "backend-api.fullname" . }}-stripprefix # Needs a corresponding Middleware object
+
+---
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: {{ include "backend-api.fullname" . }}-strip-prefix
@@ -9,30 +30,6 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - {{ .Values.ingressRoute.pathPrefix }}
-    # forceSlash: false # Uncomment if needed
-
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute
-metadata:
-  name: {{ include "backend-api.fullname" . }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "backend-api.labels" . | nindent 4 }}
-spec:
-  entryPoints:
-    - web # Assuming the default Traefik entrypoint is 'web'
-  routes:
-    - match: PathPrefix(`{{ .Values.ingressRoute.pathPrefix }}`)
-      kind: Rule
-      services:
-        - name: {{ include "backend-api.fullname" . }}
-          port: {{ .Values.service.port }}
-      {{- if .Values.ingressRoute.stripPrefix }}
-      middlewares:
-        - name: {{ include "backend-api.fullname" . }}-strip-prefix
-          # namespace is not needed for middleware in the same namespace
-          # namespace: {{ .Release.Namespace }}
-      {{- end }}
+      - /{{ .Values.companyCode | lower }}/api
+    # forceSlash: false
 {{- end }} 

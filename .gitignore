@@ -8,3 +8,4 @@
 applications/*/.env
 applications/*/.env.*
 !applications/*/.env.example 
+node_modules/
