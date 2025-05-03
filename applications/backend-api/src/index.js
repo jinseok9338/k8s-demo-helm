@@ -129,6 +129,88 @@ app.get("/api/logs", async (c) => {
   }
 });
 
+// --- NEW: Users Endpoint with Pagination ---
+app.get("/api/users", async (c) => {
+  const dbPool = c.get("pool");
+  const config = c.get("config");
+  const companyCode = config.company_code;
+
+  const limit = parseInt(c.req.query("limit") || "10", 10);
+  const offset = parseInt(c.req.query("offset") || "0", 10);
+
+  if (isNaN(limit) || isNaN(offset) || limit <= 0 || offset < 0) {
+    return c.json({error: "Invalid limit or offset parameter"}, 400);
+  }
+
+  try {
+    // Get total count for the specific tenant
+    const countResult = await dbPool.query(
+      "SELECT COUNT(*) FROM users WHERE company_code = $1",
+      [companyCode]
+    );
+    const totalItems = parseInt(countResult.rows[0].count, 10);
+
+    // Get paginated users for the specific tenant, excluding password hash
+    const result = await dbPool.query(
+      "SELECT id, email, role, company_code, created_at, updated_at FROM users WHERE company_code = $1 ORDER BY id ASC LIMIT $2 OFFSET $3",
+      [companyCode, limit, offset]
+    );
+
+    return c.json({
+      totalItems: totalItems,
+      limit: limit,
+      offset: offset,
+      users: result.rows,
+    });
+  } catch (err) {
+    console.error(`Error fetching users for tenant ${companyCode}:`, err);
+    throw new HTTPException(500, {
+      message: "Internal server error fetching users",
+    });
+  }
+});
+
+// --- NEW: Products Endpoint with Pagination ---
+app.get("/api/products", async (c) => {
+  const dbPool = c.get("pool");
+  const config = c.get("config");
+  const companyCode = config.company_code;
+
+  const limit = parseInt(c.req.query("limit") || "10", 10);
+  const offset = parseInt(c.req.query("offset") || "0", 10);
+
+  if (isNaN(limit) || isNaN(offset) || limit <= 0 || offset < 0) {
+    return c.json({error: "Invalid limit or offset parameter"}, 400);
+  }
+
+  try {
+    // Get total count for the specific tenant
+    const countResult = await dbPool.query(
+      "SELECT COUNT(*) FROM products WHERE company_code = $1",
+      [companyCode]
+    );
+    const totalItems = parseInt(countResult.rows[0].count, 10);
+
+    // Get paginated products for the specific tenant
+    const result = await dbPool.query(
+      "SELECT * FROM products WHERE company_code = $1 ORDER BY id ASC LIMIT $2 OFFSET $3",
+      [companyCode, limit, offset]
+    );
+
+    return c.json({
+      totalItems: totalItems,
+      limit: limit,
+      offset: offset,
+      products: result.rows,
+    });
+  } catch (err) {
+    console.error(`Error fetching products for tenant ${companyCode}:`, err);
+    throw new HTTPException(500, {
+      message: "Internal server error fetching products",
+    });
+  }
+});
+
 // --- Start the server ---
 
 // Run initialization (async, don't wait here)

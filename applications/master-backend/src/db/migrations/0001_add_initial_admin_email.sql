@@ -1,0 +1,1 @@
+ALTER TABLE "tenants" ADD COLUMN "initial_admin_email" text; 

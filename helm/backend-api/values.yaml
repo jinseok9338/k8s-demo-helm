@@ -5,6 +5,10 @@
 # Company Code (tenant identifier), to be set during deployment for internal logic
 companyCode: ""
 
+# Tenant specific initial settings (used by migration job)
+initialAdmin:
+  email: "admin@example.com" # Default, override per tenant via --set
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2
 
@@ -12,9 +16,9 @@ replicaCount: 2
 image:
   repository: jinseok93338/backend-api-poc
   # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.1.10"
+  tag: "v0.2.2"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -174,12 +178,21 @@ middleware:
     # Example: If release name is 'backend-dir', middleware name will be 'backend-dir-backend-api-stripprefix-api'
 # --- End NEW ---
 
-# Migration Job Configuration
-# --- DISABLED: Migration handled externally or manually ---
-migration:
-  enabled: false # Disabled
-  # image: postgres:15-alpine
-  # migrationsPath: "migrations"
-# --- End DISABLED ---
-
-# --- REMOVED: PostgreSQL dependency settings no longer needed here ---
+# Migration Job Configuration (using Helm Hook)
+migrationJob:
+  enabled: true # Enable the pre-install/pre-upgrade migration job
+  image:
+    # Use the same image as the main application by default
+    # Ensure this image contains migration scripts and runner (e.g., knex)
+    repository: jinseok93338/backend-api-poc
+    tag: "v0.2.2" # Use the same tag as the main image by default
+    pullPolicy: Always
+  # Optional: Add resource requests/limits for the migration job pod
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 128Mi
+  #   limits:
+  #     cpu: 200m
+  #     memory: 256Mi
+# --- REMOVED: Old/Disabled Migration Section ---

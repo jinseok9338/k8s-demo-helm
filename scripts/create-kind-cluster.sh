@@ -39,7 +39,7 @@ then
 fi
 
 echo "Adding Traefik Helm repository..."
-helm repo add traefik https://helm.traefik.io/traefik
+helm repo add traefik https://helm.traefik.io/traefik || true # Allow command to fail if repo already exists
 helm repo update
 
 echo "Installing Traefik..."
@@ -47,7 +47,7 @@ echo "Installing Traefik..."
 # but you could use a dedicated namespace like 'traefik'.
 helm install traefik traefik/traefik \
   --namespace kube-system \
-  --set-string=providers.kubernetesCRD.allowCrossNamespace=true \
+  --set=providers.kubernetesCRD.allowCrossNamespace=true \
   --set=providers.kubernetesCRD.enabled=true \
   --set=providers.kubernetesIngress.enabled=true \
   --set=providers.kubernetesIngress.allowExternalNameServices=true \

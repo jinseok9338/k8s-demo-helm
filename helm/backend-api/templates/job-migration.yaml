@@ -1,0 +1,68 @@
+{{- if .Values.migrationJob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "backend-api.fullname" . }}-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "backend-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    # This is what defines this resource as a hook.
+    # Run before install and upgrade operations. Delete after successful execution.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5" # Ensure it runs before other potential hooks
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation # Clean up successful jobs
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "backend-api.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: "{{ .Values.migrationJob.image.repository }}:{{ .Values.migrationJob.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.migrationJob.image.pullPolicy }}
+          # Ensure your Docker image's entrypoint or this command executes migrations
+          # Example assumes a script 'run-migrations.js' handles it
+          command: ["node", "node_modules/.bin/knex", "migrate:latest", "--knexfile", "./knexfile.cjs"] # Adjust command based on your migration tool and setup
+          env:
+            # --- Tenant Specific Values ---
+            - name: COMPANY_CODE
+              value: {{ .Values.companyCode | quote }}
+            - name: INITIAL_ADMIN_EMAIL
+              value: {{ .Values.initialAdmin.email | quote }}
+            # Add other initialAdmin fields if needed
+
+            # --- Database Connection ---
+            # Construct the internal K8s service hostname
+            # Assumes PostgreSQL service name matches the value in .Values.db.serviceName
+            - name: DB_HOST
+              value: {{ printf "%s.%s.svc.cluster.local" .Values.db.serviceName .Release.Namespace }}
+            - name: DB_PORT
+              value: {{ .Values.db.port | quote }}
+            - name: DB_USER
+              value: {{ .Values.db.user | quote }}
+            - name: DB_NAME
+              value: {{ .Values.db.dbName | quote }}
+            # Reference the password from the existing secret
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.db.existingSecret }} # e.g., postgresql-dir
+                  key: {{ .Values.db.secretPasswordKey }} # e.g., postgres-password
+
+          # Optional: Add resource requests/limits matching values.yaml
+          {{- if .Values.migrationJob.resources }}
+          resources:
+            requests:
+              cpu: {{ .Values.migrationJob.resources.requests.cpu }}
+              memory: {{ .Values.migrationJob.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.migrationJob.resources.limits.cpu }}
+              memory: {{ .Values.migrationJob.resources.limits.memory }}
+          {{- end }}
+  backoffLimit: 1 # Number of retries before marking job as failed
+{{- end }} 

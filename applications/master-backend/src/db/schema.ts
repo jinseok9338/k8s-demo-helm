@@ -41,4 +41,5 @@ export const tenants = pgTable("tenants", {
   status: varchar("status", {length: 50}).notNull().default("pending"),
   namespace: varchar("namespace", {length: 63}),
   helmReleaseNames: jsonb("helm_release_names").$type<HelmReleaseNames>(),
+  initialAdminEmail: text("initial_admin_email"),
 });

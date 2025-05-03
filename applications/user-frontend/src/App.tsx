@@ -2,36 +2,42 @@ import {useQuery} from "@tanstack/react-query";
 import "./App.css";
 import {useState} from "react";
 
-// Define the expected shape of the API response
-interface HelloWorldResponse {
-  message: string;
-}
-
-// Add interface for Company Config
-interface CompanyConfigResponse {
+// --- NEW: Interface for User ---
+interface User {
+  id: number;
+  email: string;
+  role: string;
   company_code: string;
-  logo_url: string;
+  created_at: string; // ISO string format
+  updated_at: string; // ISO string format
 }
 
-// --- NEW: Interface for Network Log ---
-interface NetworkLog {
-  log_id: number;
-  log_timestamp: string; // ISO string format
-  http_method: string;
-  request_path: string;
-  status_code: number;
-  duration_ms: string; // Comes as string from DB with NUMERIC type
-  source_ip: string | null;
-  request_id: string;
-}
-
-interface NetworkLogsResponse {
-  totalLogs: number;
+interface UsersResponse {
+  totalItems: number;
   limit: number;
   offset: number;
-  logs: NetworkLog[];
+  users: User[];
 }
-// --- End NEW Interface ---
+// --- End NEW User Interface ---
+
+// --- NEW: Interface for Product ---
+interface Product {
+  id: number;
+  name: string;
+  description: string | null;
+  price: string; // Comes as string from DB decimal type
+  company_code: string;
+  created_at: string; // ISO string format
+  updated_at: string; // ISO string format
+}
+
+interface ProductsResponse {
+  totalItems: number;
+  limit: number;
+  offset: number;
+  products: Product[];
+}
+// --- End NEW Product Interface ---
 
 declare global {
   interface Window {
@@ -42,12 +48,10 @@ declare global {
   }
 }
 
-// Function to fetch data from the backend
-const fetchHelloWorld = async (): Promise<HelloWorldResponse> => {
-  // --- REVERTED: Use relative path again ---
-  const apiUrl = `/api/hello-world`;
-  // --- End REVERT ---
-  console.log(`Fetching from: ${apiUrl}`);
+// --- NEW: Function to fetch users ---
+const fetchUsers = async (limit = 10, offset = 0): Promise<UsersResponse> => {
+  const apiUrl = `/api/users?limit=${limit}&offset=${offset}`;
+  console.log(`Fetching users from: ${apiUrl}`);
 
   const response = await fetch(apiUrl);
   if (!response.ok) {
@@ -58,33 +62,15 @@ const fetchHelloWorld = async (): Promise<HelloWorldResponse> => {
   }
   return response.json();
 };
+// --- End NEW Function ---
 
-// Function to fetch company config from the backend
-const fetchCompanyConfig = async (): Promise<CompanyConfigResponse> => {
-  const apiUrl = `/api/config`; // Changed endpoint
-  // --- End MODIFICATION ---
-  console.log(`Fetching company config from: ${apiUrl}`);
-
-  const response = await fetch(apiUrl);
-  if (!response.ok) {
-    // Removed 404 specific handling as config should ideally always exist now
-    const errorText = await response.text();
-    throw new Error(
-      `Network response was not ok: ${response.status} ${response.statusText} - ${errorText}`
-    );
-  }
-  return response.json();
-};
-
-// --- NEW: Function to fetch network logs ---
-const fetchNetworkLogs = async (
-  limit = 20,
+// --- NEW: Function to fetch products ---
+const fetchProducts = async (
+  limit = 10,
   offset = 0
-): Promise<NetworkLogsResponse> => {
-  // --- REVERTED: Use relative path again ---
-  const apiUrl = `/api/logs?limit=${limit}&offset=${offset}`;
-  // --- End REVERT ---
-  console.log(`Fetching network logs from: ${apiUrl}`);
+): Promise<ProductsResponse> => {
+  const apiUrl = `/api/products?limit=${limit}&offset=${offset}`;
+  console.log(`Fetching products from: ${apiUrl}`);
 
   const response = await fetch(apiUrl);
   if (!response.ok) {
@@ -98,115 +84,81 @@ const fetchNetworkLogs = async (
 // --- End NEW Function ---
 
 function App() {
-  // const [companyCodeInput, setCompanyCodeInput] = useState("");
-  // const [queryCompanyCode, setQueryCompanyCode] = useState<string | null>(null);
-  const [logOffset, setLogOffset] = useState(0);
-  const logLimit = 20; // Show 20 logs per page
+  // State for pagination
+  const [userOffset, setUserOffset] = useState(0);
+  const [productOffset, setProductOffset] = useState(0);
+  const pageLimit = 10; // Show 10 items per page
 
+  // --- NEW: Query for users ---
   const {
-    data: helloData,
-    error: helloError,
-    isLoading: helloLoading,
-  } = useQuery<HelloWorldResponse, Error>({
-    queryKey: ["helloWorld"],
-    queryFn: fetchHelloWorld,
-  });
-
-  // Query for company config - Run automatically on mount
-  const {
-    data: configData,
-    error: configError,
-    isLoading: configLoading,
-    isFetching: configFetching,
-  } = useQuery<CompanyConfigResponse, Error>({
-    queryKey: ["companyConfig"], // Simplified key
-    queryFn: fetchCompanyConfig, // Call the modified function
-    // enabled: true, // Default is true, can be omitted
-    retry: 3, // Retry a few times if initial fetch fails
-  });
-
-  // --- NEW: Query for network logs ---
-  const {
-    data: networkLogsData,
-    error: networkLogsError,
-    isLoading: networkLogsLoading,
-    isFetching: networkLogsFetching,
-    refetch: refetchNetworkLogs, // Function to manually refetch logs
-  } = useQuery<NetworkLogsResponse, Error>({
-    queryKey: ["networkLogs", logLimit, logOffset], // Include limit and offset in key
-    queryFn: () => fetchNetworkLogs(logLimit, logOffset),
-    // Optional: Refetch every 10 seconds
-    // refetchInterval: 10000,
+    data: usersData,
+    error: usersError,
+    isLoading: usersLoading,
+    isFetching: usersFetching,
+    refetch: refetchUsers,
+  } = useQuery<UsersResponse, Error>({
+    queryKey: ["users", pageLimit, userOffset], // Include limit and offset in key
+    queryFn: () => fetchUsers(pageLimit, userOffset),
   });
   // --- End NEW Query ---
 
-  const handlePrevLogs = () => {
-    setLogOffset((prev) => Math.max(0, prev - logLimit));
+  // --- NEW: Query for products ---
+  const {
+    data: productsData,
+    error: productsError,
+    isLoading: productsLoading,
+    isFetching: productsFetching,
+    refetch: refetchProducts,
+  } = useQuery<ProductsResponse, Error>({
+    queryKey: ["products", pageLimit, productOffset], // Include limit and offset in key
+    queryFn: () => fetchProducts(pageLimit, productOffset),
+  });
+  // --- End NEW Query ---
+
+  // --- Handlers for User Pagination ---
+  const handlePrevUsers = () => {
+    setUserOffset((prev) => Math.max(0, prev - pageLimit));
   };
 
-  const handleNextLogs = () => {
-    if (networkLogsData && logOffset + logLimit < networkLogsData.totalLogs) {
-      setLogOffset((prev) => prev + logLimit);
+  const handleNextUsers = () => {
+    if (usersData && userOffset + pageLimit < usersData.totalItems) {
+      setUserOffset((prev) => prev + pageLimit);
+    }
+  };
+
+  // --- Handlers for Product Pagination ---
+  const handlePrevProducts = () => {
+    setProductOffset((prev) => Math.max(0, prev - pageLimit));
+  };
+
+  const handleNextProducts = () => {
+    if (productsData && productOffset + pageLimit < productsData.totalItems) {
+      setProductOffset((prev) => prev + pageLimit);
     }
   };
 
   return (
     <>
       <h1>Vite + React + TS + TanStack Query</h1>
-      <div className="card">
-        <h2>Backend API Data (Hello World):</h2>
-        {helloLoading && <p>Loading...</p>}
-        {helloError && <p>Error loading data: {helloError.message}</p>}
-        {helloData && <p>Message: {helloData.message}</p>}
-      </div>
 
+      {/* --- NEW: Users Section --- */}
       <div className="card">
-        <h2>Company Configuration:</h2>
-        {(configLoading || configFetching) && <p>Loading config...</p>}
-        {configError && <p>Error loading config: {configError.message}</p>}
-        {configData && (
-          <div>
-            <h3>Configuration for: {configData.company_code}</h3>
-            {configData.logo_url ? (
-              <img
-                src={configData.logo_url}
-                alt={`${configData.company_code} Logo`}
-                style={{
-                  maxWidth: "200px",
-                  maxHeight: "100px",
-                  marginTop: "10px",
-                }}
-              />
-            ) : (
-              <p>No logo URL found.</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* --- NEW: Network Logs Section --- */}
-      <div className="card">
-        <h2>Network Request Logs (Latest First)</h2>
+        <h2>Users</h2>
         <div>
-          <button
-            onClick={() => refetchNetworkLogs()}
-            disabled={networkLogsFetching}
-          >
-            {networkLogsFetching ? "Refreshing..." : "Refresh Logs"}
+          <button onClick={() => refetchUsers()} disabled={usersFetching}>
+            {usersFetching ? "Refreshing..." : "Refresh Users"}
           </button>
         </div>
-        {(networkLogsLoading || networkLogsFetching) && !networkLogsData && (
-          <p>Loading logs...</p>
+        {(usersLoading || usersFetching) && !usersData && (
+          <p>Loading users...</p>
         )}
-        {networkLogsError && (
-          <p>Error loading logs: {networkLogsError.message}</p>
-        )}
-        {networkLogsData && (
+        {usersError && <p>Error loading users: {usersError.message}</p>}
+        {usersData && (
           <>
             <p>
-              Showing logs {logOffset + 1} -{" "}
-              {Math.min(logOffset + logLimit, networkLogsData.totalLogs)} of{" "}
-              {networkLogsData.totalLogs}
+              Showing users {userOffset + 1} -{" "}
+              {Math.min(userOffset + pageLimit, usersData.totalItems)} of{" "}
+              {usersData.totalItems}
             </p>
             <div
               style={{
@@ -220,71 +172,63 @@ function App() {
                 <thead>
                   <tr>
                     <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Timestamp
+                      ID
                     </th>
                     <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Method
+                      Email
                     </th>
                     <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Path
+                      Role
                     </th>
                     <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Status
+                      Company
                     </th>
                     <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Duration (ms)
+                      Created At
                     </th>
-                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
-                      Source IP
-                    </th>
-                    {/*<th style={{ border: '1px solid #ddd', padding: '4px' }}>Request ID</th>*/}
                   </tr>
                 </thead>
                 <tbody>
-                  {networkLogsData.logs.map((log) => (
-                    <tr key={log.log_id}>
+                  {usersData.users.map((user) => (
+                    <tr key={user.id}>
                       <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {new Date(log.log_timestamp).toLocaleString()}
+                        {user.id}
                       </td>
                       <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {log.http_method}
+                        {user.email}
                       </td>
                       <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {log.request_path}
+                        {user.role}
                       </td>
                       <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {log.status_code}
+                        {user.company_code}
                       </td>
                       <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {log.duration_ms}
+                        {new Date(user.created_at).toLocaleString()}
                       </td>
-                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
-                        {log.source_ip || "N/A"}
-                      </td>
-                      {/*<td style={{ border: '1px solid #ddd', padding: '4px' }}>{log.request_id}</td>*/}
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {networkLogsData.logs.length === 0 && (
+              {usersData.users.length === 0 && (
                 <p style={{textAlign: "center", padding: "10px"}}>
-                  No logs found.
+                  No users found.
                 </p>
               )}
             </div>
             <div>
               <button
-                onClick={handlePrevLogs}
-                disabled={logOffset === 0 || networkLogsFetching}
+                onClick={handlePrevUsers}
+                disabled={userOffset === 0 || usersFetching}
               >
                 Previous
               </button>
               <button
-                onClick={handleNextLogs}
+                onClick={handleNextUsers}
                 disabled={
-                  !networkLogsData ||
-                  logOffset + logLimit >= networkLogsData.totalLogs ||
-                  networkLogsFetching
+                  !usersData ||
+                  userOffset + pageLimit >= usersData.totalItems ||
+                  usersFetching
                 }
               >
                 Next
@@ -293,7 +237,107 @@ function App() {
           </>
         )}
       </div>
-      {/* --- End NEW Section --- */}
+      {/* --- End NEW Users Section --- */}
+
+      {/* --- NEW: Products Section --- */}
+      <div className="card">
+        <h2>Products</h2>
+        <div>
+          <button onClick={() => refetchProducts()} disabled={productsFetching}>
+            {productsFetching ? "Refreshing..." : "Refresh Products"}
+          </button>
+        </div>
+        {(productsLoading || productsFetching) && !productsData && (
+          <p>Loading products...</p>
+        )}
+        {productsError && (
+          <p>Error loading products: {productsError.message}</p>
+        )}
+        {productsData && (
+          <>
+            <p>
+              Showing products {productOffset + 1} -{" "}
+              {Math.min(productOffset + pageLimit, productsData.totalItems)} of{" "}
+              {productsData.totalItems}
+            </p>
+            <div
+              style={{
+                maxHeight: "300px",
+                overflowY: "scroll",
+                border: "1px solid #ccc",
+                marginBottom: "10px",
+              }}
+            >
+              <table style={{width: "100%", borderCollapse: "collapse"}}>
+                <thead>
+                  <tr>
+                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
+                      ID
+                    </th>
+                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
+                      Name
+                    </th>
+                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
+                      Description
+                    </th>
+                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
+                      Price
+                    </th>
+                    <th style={{border: "1px solid #ddd", padding: "4px"}}>
+                      Company
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productsData.products.map((product) => (
+                    <tr key={product.id}>
+                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
+                        {product.id}
+                      </td>
+                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
+                        {product.name}
+                      </td>
+                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
+                        {product.description}
+                      </td>
+                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
+                        ${product.price}
+                      </td>
+                      <td style={{border: "1px solid #ddd", padding: "4px"}}>
+                        {product.company_code}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {productsData.products.length === 0 && (
+                <p style={{textAlign: "center", padding: "10px"}}>
+                  No products found.
+                </p>
+              )}
+            </div>
+            <div>
+              <button
+                onClick={handlePrevProducts}
+                disabled={productOffset === 0 || productsFetching}
+              >
+                Previous
+              </button>
+              <button
+                onClick={handleNextProducts}
+                disabled={
+                  !productsData ||
+                  productOffset + pageLimit >= productsData.totalItems ||
+                  productsFetching
+                }
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      {/* --- End NEW Products Section --- */}
 
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more

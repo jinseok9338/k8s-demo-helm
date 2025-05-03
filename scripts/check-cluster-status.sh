@@ -7,7 +7,7 @@ CONTEXT_NAME="kind-${CLUSTER_NAME}"
 echo "--- Checking Cluster Status for '${CLUSTER_NAME}' ---"
 
 # 1. Verify current kubectl context
-echo "\n[1/4] Verifying kubectl context..."
+echo "\n[1/5] Verifying kubectl context..."
 CURRENT_CONTEXT=$(kubectl config current-context)
 if [ "${CURRENT_CONTEXT}" == "${CONTEXT_NAME}" ]; then
   echo "OK: Current context is '${CONTEXT_NAME}'."
@@ -17,15 +17,19 @@ else
 fi
 
 # 2. Check Node Status
-echo "\n[2/4] Checking Node Status..."
+echo "\n[2/5] Checking Node Status..."
 kubectl --context "${CONTEXT_NAME}" get nodes -o wide
 
 # 3. Check Core System Pods Status (kube-system namespace)
-echo "\n[3/4] Checking Core System Pods (kube-system)..."
+echo "\n[3/5] Checking Core System Pods (kube-system)..."
 kubectl --context "${CONTEXT_NAME}" get pods -n kube-system
 
 # 4. Check CoreDNS Pods Status (kube-system namespace)
-echo "\n[4/4] Checking CoreDNS Pods (kube-system)..."
+echo "\n[4/5] Checking CoreDNS Pods (kube-system)..."
 kubectl --context "${CONTEXT_NAME}" get pods -n kube-system -l k8s-app=kube-dns
+
+# 5. Check Traefik Pods Status (kube-system namespace)
+echo "\n[5/5] Checking Traefik Pods (kube-system)..."
+kubectl --context "${CONTEXT_NAME}" get pods -n kube-system -l app.kubernetes.io/name=traefik
 
 echo "\n--- Cluster Status Check Complete ---" 

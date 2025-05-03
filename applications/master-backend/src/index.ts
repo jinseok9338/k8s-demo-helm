@@ -855,6 +855,7 @@ app.post("/api/tenants/:companyCode/deploy", async (c) => {
 // --- Background Deployment Logic (Modified with DB Status Updates) ---
 async function deployTenantInBackground(companyCode: string) {
   let config: Awaited<ReturnType<typeof getTenantConfig>> | null = null;
+  // let initialAdminEmail: string | null | undefined = null; // Removed: Column does not exist in schema
 
   // Initial Status: PENDING
   await updateTenantStatus(companyCode, STATUS_PENDING);
@@ -863,9 +864,30 @@ async function deployTenantInBackground(companyCode: string) {
   );
 
   try {
+    // Fetch tenant config including release names and namespace
     config = await getTenantConfig(companyCode);
     const {namespace, pgReleaseName, backendReleaseName, frontendReleaseName} =
       config;
+
+    // --- REMOVED: Fetch initial admin email from the database (column missing) ---
+    // try {
+    //   const tenantData = await db.query.tenants.findFirst({
+    //     where: eq(schema.tenants.companyCode, companyCode),
+    //     columns: {
+    //       initialAdminEmail: true, // Assuming this column exists in your schema
+    //     },
+    //   });
+    //   initialAdminEmail = tenantData?.initialAdminEmail;
+    //   if (!initialAdminEmail) {
+    //     console.warn(`Initial admin email not found in DB for tenant ${companyCode}. Using default or empty.`);
+    //   } else {
+    //     console.log(`Found initial admin email for ${companyCode}: ${initialAdminEmail}`);
+    //   }
+    // } catch (dbError) {
+    //   console.error(`Error fetching initial admin email for ${companyCode}:`, dbError);
+    // }
+    // --- End REMOVED ---
+
     console.log(
       `Deployment for ${companyCode}: Configuration found for namespace ${namespace}. Starting deployment steps...`
     );
@@ -882,39 +904,48 @@ async function deployTenantInBackground(companyCode: string) {
       "--namespace",
       namespace,
       "--create-namespace",
-    ]; // Add necessary values
+      // TODO: Add any necessary --set values for PostgreSQL (e.g., persistence, resources)
+    ];
     await runHelmCommandAndStream(companyCode, pgArgs, "postgresql");
+    // Wait for the primary pod (usually index 0)
     await waitForResourceReady(
       companyCode,
       namespace,
       "pod",
-      `app.kubernetes.io/instance=${pgReleaseName},app.kubernetes.io/name=postgresql`,
+      `app.kubernetes.io/instance=${pgReleaseName},app.kubernetes.io/name=postgresql,app.kubernetes.io/component=primary`, // More specific selector for primary pod
       300
     );
 
-    // 2. Deploy Backend API
+    // 2. Deploy Backend API (with migration job enabled)
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_BE);
     const backendArgs = [
       "upgrade",
       "--install",
       backendReleaseName,
-      "../../helm/backend-api",
+      "../../helm/backend-api", // Assuming Helm chart is in this relative path
       "--namespace",
       namespace,
       "--set",
       `companyCode=${companyCode}`,
       "--set",
-      `db.serviceName=${pgReleaseName}`,
+      `db.serviceName=${pgReleaseName}`, // Point to the correct PG service
       "--set",
-      `db.existingSecret=${pgReleaseName}`,
-    ]; // Add necessary values
+      `db.existingSecret=${pgReleaseName}`, // Point to the correct PG secret
+      "--set",
+      "migrationJob.enabled=true", // <-- Enable the migration Job Hook
+      // --- REMOVED: --set for initialAdmin.email (column missing in DB) ---
+      // ...(initialAdminEmail ? [`--set initialAdmin.email=${initialAdminEmail}`] : [])
+      // TODO: Ensure the image tag used by migrationJob.image.tag in values.yaml is correct or set it explicitly here if needed
+      // e.g., `--set migrationJob.image.tag=v0.1.x`
+    ];
     await runHelmCommandAndStream(companyCode, backendArgs, "backend-api");
+    // Wait for the deployment itself (which starts after the migration job succeeds)
     await waitForResourceReady(
       companyCode,
       namespace,
       "deployment",
       `app.kubernetes.io/instance=${backendReleaseName}`,
-      180
+      180 // Adjust timeout as needed, considering migration time
     );
 
     // 3. Deploy User Frontend
