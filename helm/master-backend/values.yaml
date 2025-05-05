@@ -1,0 +1,106 @@
+# Default values for master-backend.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: jinseok93338/master-backend
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.1.6"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80 # Port the service will listen on
+  targetPort: 3001 # Port the application listens on inside the pod
+
+ingress:
+  enabled: false
+  className: ""
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# Application specific configuration
+config:
+  # IMPORTANT: It is strongly recommended to use Kubernetes Secrets to manage
+  # sensitive information like database URLs or credentials, rather than putting
+  # them directly in values.yaml.
+  # You can create a secret externally and reference it in the deployment template,
+  # or use templating to create a secret from values (less secure).
+  database:
+    # Example placeholder. Replace with your actual managed database URL
+    # or configure the deployment to use a secret.
+    # url: "postgresql://user:password@your-managed-db-host:5432/masterdb?sslmode=require" # Example, DO NOT COMMIT REAL CREDENTIALS
+    url: "postgresql://postgres:masterdb@host.docker.internal:5432/postgres" # Updated for local Docker testing
+
+resources:
+  {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+# Secret values - These will be stored in a Kubernetes Secret
+# secret: # <<< Removed this section as it's not used by the template
+#   # IMPORTANT: For production, use a proper managed DB URL and manage secrets securely (e.g., Vault, GSM)
+#   # For local Kind testing with host PostgreSQL via host.docker.internal:
+#   databaseUrl: "postgresql://postgres:masterdb@host.docker.internal:5432/postgres"

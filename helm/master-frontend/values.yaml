@@ -1,0 +1,82 @@
+# Default values for master-frontend.
+replicaCount: 1
+
+image:
+  repository: jinseok93338/master-frontend
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Frontend usually doesn't need specific cluster permissions,
+  # so we can disable creation by default unless needed for specific integrations.
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80 # Service port
+  targetPort: 80 # Nginx container port
+
+# Add application specific configuration
+# config: # Section removed as backend URL is handled by Ingress path routing
+#   # URL for the master-backend API service within the cluster
+#   backendApiUrl: "http://master-backend-release:80"
+
+ingress:
+  # Master frontend likely needs Ingress to be accessible externally.
+  enabled: true
+  # DEPRECATED: Use ingressClassName instead
+  # className: "traefik"
+  ingressClassName: "traefik"
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: traefik
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    # IMPORTANT: Replace with the actual hostname for your master frontend
+    - host: master.localhost # Updated for local Kind/Traefik setup
+      paths:
+        []
+        # # Example Path configuration (paths are now defined in the template using frontend/backend values)
+        # - path: /
+        #   pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+  # Path configuration moved here for clarity
+  frontendPath: / # Path for the frontend application
+  frontendPathType: Prefix
+  backendPath: /api/ # Path for the backend API (simplified)
+  backendPathType: Prefix
+
+# Define backend service details for Ingress routing
+backend:
+  # These should match the release name and chart name of your master-backend deployment
+  releaseNameOverride: master-backend-release
+  chartNameOverride: master-backend # Assuming the chart name is 'master-backend'
+
+resources: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5 # Frontend usually needs fewer max replicas than backend
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

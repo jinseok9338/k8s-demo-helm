@@ -1,0 +1,77 @@
+{{- if .Values.serviceAccount.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "master-backend.fullname" . }}-manager-role
+  labels:
+    {{- include "master-backend.labels" . | nindent 4 }}
+rules:
+  # Permissions to manage namespaces (needed for tenant creation/deletion)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+  # Permissions needed within tenant namespaces managed by master-backend
+  # Required for status checks, helm operations, kubectl commands etc.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "scale"] # Added scale verb
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"] # Primarily for waiting
+  - apiGroups: [""]
+    resources: ["pods/log"] # Potentially needed for debugging helm failures
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services", "secrets", "configmaps", "persistentvolumeclaims", "serviceaccounts"] # Common resources managed by Helm, Added serviceaccounts
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"] # Helm might create these (e.g., migration jobs)
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"] # Helm might create these
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Permissions for Helm release management itself (if using Helm SDK/API directly - less relevant for CLI)
+  # - apiGroups: ["helm.toolkit.fluxcd.io", "source.toolkit.fluxcd.io"] # Example if using Flux Helm controller
+  #   resources: ["helmreleases", "helmrepositories"]
+  #   verbs: ["*"]
+  # Permission to check cluster version
+  - apiGroups: [""]
+    resources: ["nodes"] # Often needed to infer cluster version or capabilities indirectly
+    verbs: ["get", "list"]
+  - apiGroups: ["discovery.k8s.io"] # For API discovery used by kubectl/helm
+    resources: ["apigroups", "apiresources"]
+    verbs: ["get"]
+  # Allow management of RBAC resources within tenant namespaces (needed for Helm charts creating roles/bindings)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete", "bind", "escalate"]
+  # Allow management of custom resources (e.g., IngressRoute for Traefik) if needed
+  # Adjust the apiGroups and resources based on the CRDs your tenant charts might install
+  - apiGroups: ["traefik.containo.us", "traefik.io"]
+    resources: ["ingressroutes", "ingressroutetcps", "middlewares", "tlsoptions", "serverstransports"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  # Allow management of Pod Disruption Budgets (PDBs)
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Allow getting events for debugging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  # --- Add other specific permissions as needed by master-backend ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "master-backend.fullname" . }}-manager-binding
+  labels:
+    {{- include "master-backend.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "master-backend.fullname" . }}-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "master-backend.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }} # Service Account is in the release namespace
+{{- end -}} 

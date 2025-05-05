@@ -7,10 +7,13 @@ import "dotenv/config";
 import {drizzle} from "drizzle-orm/node-postgres";
 import {Pool} from "pg";
 import {eq, sql} from "drizzle-orm"; // Import eq and sql for comparisons
-import * as schema from "./db/schema";
+import * as schema from "./db/schema.js";
 import {cors} from "hono/cors";
 // Import the error parsing utility
-import {parseKubernetesError, ParsedKubeError} from "./utils/kubernetes-error";
+import {
+  parseKubernetesError,
+  ParsedKubeError,
+} from "./utils/kubernetes-error.js";
 
 // --- Kubernetes Client Setup ---
 import {
@@ -86,6 +89,65 @@ async function runHelmCommandAndStream(
 ): Promise<void> {
   const command = "helm";
   const prefix = `[helm-${stepName}]`;
+
+  // --- ADDED: Ensure Helm repo is added and updated ---
+  try {
+    console.log(
+      `${prefix} Ensuring bitnami repository exists and is updated...`
+    );
+    // Use a helper async function to handle spawn promise logic cleanly
+    const runSpawn = (
+      cmd: string,
+      args: string[]
+    ): Promise<{code: number | null; stdout: string; stderr: string}> => {
+      return new Promise((resolve, reject) => {
+        const process = spawn(cmd, args, {stdio: "pipe"});
+        let stdoutData = "";
+        let stderrData = "";
+        process.stdout?.on("data", (data) => (stdoutData += data.toString()));
+        process.stderr?.on("data", (data) => (stderrData += data.toString()));
+        process.on("close", (code) =>
+          resolve({code, stdout: stdoutData, stderr: stderrData})
+        );
+        process.on("error", reject);
+      });
+    };
+
+    // Add repo
+    const addResult = await runSpawn(command, [
+      "repo",
+      "add",
+      "bitnami",
+      "https://charts.bitnami.com/bitnami",
+    ]);
+    if (addResult.code === 0 || addResult.stderr.includes("already exists")) {
+      console.log(`${prefix} Bitnami repo added or already exists.`);
+      // Update repo
+      const updateResult = await runSpawn(command, ["repo", "update"]);
+      if (updateResult.code === 0) {
+        console.log(`${prefix} Helm repositories updated successfully.`);
+      } else {
+        console.error(`${prefix} [STDERR] Helm repo update failed with code ${updateResult.code}:
+${updateResult.stderr}`);
+        throw new Error("Helm repo update failed.");
+      }
+    } else {
+      console.error(`${prefix} [STDERR] Helm repo add failed with code ${addResult.code}:
+${addResult.stderr}`);
+      throw new Error("Helm repo add failed.");
+    }
+    console.log(`${prefix} Helm repository setup complete.`);
+  } catch (setupError: any) {
+    console.error(
+      `${prefix} Failed Helm repository setup: ${setupError.message}`
+    );
+    // Propagate the error to stop the deployment process
+    throw new Error(
+      `Helm repository setup failed for ${stepName} (tenant: ${companyCode}): ${setupError.message}`
+    );
+  }
+  // --- END ADDED ---
+
   console.log(
     `${prefix} Starting execution for ${companyCode}: ${command} ${helmArgs.join(
       " "
@@ -328,7 +390,18 @@ async function runKubectlScaleCommand(
 // --- End Scale Helper ---
 
 const kc = new KubeConfig();
-kc.loadFromDefault(); // Load config from default location (~/.kube/config or KUBECONFIG env var)
+// kc.loadFromDefault(); // Load config from default location (~/.kube/config or KUBECONFIG env var)
+// --- MODIFIED: Load from cluster if available, otherwise default ---
+if (process.env.KUBERNETES_SERVICE_HOST) {
+  // We are likely running inside a cluster
+  console.log("Loading Kubernetes config from cluster service account...");
+  kc.loadFromCluster();
+} else {
+  // We are likely running outside a cluster (local development)
+  console.log("Loading Kubernetes config from default kubeconfig location...");
+  kc.loadFromDefault();
+}
+// --- END MODIFICATION ---
 const k8sCoreApi = kc.makeApiClient(CoreV1Api);
 const k8sVersionApi = kc.makeApiClient(VersionApi);
 const k8sAppsApi = kc.makeApiClient(AppsV1Api);
@@ -842,6 +915,9 @@ app.post("/api/tenants/:companyCode/deploy", async (c) => {
   const companyCode = c.req.param("companyCode").toUpperCase();
   console.log(`Deployment requested for tenant: ${companyCode}`);
 
+  // --- ADDED LOG ---
+  console.log(`>>> Triggering background deployment for ${companyCode}...`);
+  // --- END ADDED LOG ---
   deployTenantInBackground(companyCode);
 
   // Return 202 Accepted immediately
@@ -854,6 +930,11 @@ app.post("/api/tenants/:companyCode/deploy", async (c) => {
 
 // --- Background Deployment Logic (Modified with DB Status Updates) ---
 async function deployTenantInBackground(companyCode: string) {
+  // --- ADDED LOG ---
+  console.log(
+    `>>> deployTenantInBackground function started for ${companyCode}`
+  );
+  // --- END ADDED LOG ---
   let config: Awaited<ReturnType<typeof getTenantConfig>> | null = null;
   // let initialAdminEmail: string | null | undefined = null; // Removed: Column does not exist in schema
 
@@ -918,65 +999,200 @@ async function deployTenantInBackground(companyCode: string) {
 
     // 2. Deploy Backend API (with migration job enabled)
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_BE);
-    const backendArgs = [
-      "upgrade",
-      "--install",
-      backendReleaseName,
-      "../../helm/backend-api", // Assuming Helm chart is in this relative path
-      "--namespace",
-      namespace,
-      "--set",
-      `companyCode=${companyCode}`,
-      "--set",
-      `db.serviceName=${pgReleaseName}`, // Point to the correct PG service
-      "--set",
-      `db.existingSecret=${pgReleaseName}`, // Point to the correct PG secret
-      "--set",
-      "migrationJob.enabled=true", // <-- Enable the migration Job Hook
-      // --- REMOVED: --set for initialAdmin.email (column missing in DB) ---
-      // ...(initialAdminEmail ? [`--set initialAdmin.email=${initialAdminEmail}`] : [])
-      // TODO: Ensure the image tag used by migrationJob.image.tag in values.yaml is correct or set it explicitly here if needed
-      // e.g., `--set migrationJob.image.tag=v0.1.x`
-    ];
-    await runHelmCommandAndStream(companyCode, backendArgs, "backend-api");
-    // Wait for the deployment itself (which starts after the migration job succeeds)
-    await waitForResourceReady(
-      companyCode,
-      namespace,
-      "deployment",
-      `app.kubernetes.io/instance=${backendReleaseName}`,
-      180 // Adjust timeout as needed, considering migration time
-    );
+
+    // --- MODIFIED: Clone repo logic with better logging/error handling ---
+    const chartRepoUrl = "https://github.com/jinseok9338/k8s-demo-helm.git";
+    const backendChartSubPath = "helm/backend-api";
+    const tempChartDir = `/tmp/tenant-charts/${companyCode}`;
+    let localBackendChartPath = "";
+
+    // Helper to run spawn and capture output/errors
+    const runSpawnAndLog = async (
+      logPrefix: string,
+      cmd: string,
+      args: string[],
+      options?: {cwd?: string}
+    ): Promise<void> => {
+      console.log(
+        `${logPrefix} Executing: ${cmd} ${args.join(" ")} ${
+          options?.cwd ? `(in ${options.cwd})` : ""
+        }`
+      );
+      return new Promise((resolve, reject) => {
+        const process = spawn(cmd, args, {stdio: "pipe", ...options});
+        let stdoutData = "";
+        let stderrData = "";
+        process.stdout?.on("data", (data) => (stdoutData += data.toString()));
+        process.stderr?.on("data", (data) => (stderrData += data.toString()));
+        process.on("close", (code) => {
+          console.log(`${logPrefix} stdout:\n${stdoutData}`);
+          if (stderrData) {
+            console.error(`${logPrefix} stderr:\n${stderrData}`);
+          }
+          if (code === 0) {
+            console.log(`${logPrefix} Command finished successfully (code 0).`);
+            resolve();
+          } else {
+            console.error(`${logPrefix} Command failed with code ${code}.`);
+            reject(
+              new Error(
+                `Command "${cmd} ${args.join(
+                  " "
+                )}" failed with code ${code}.\nStderr: ${stderrData}`
+              )
+            );
+          }
+        });
+        process.on("error", (err) => {
+          console.error(`${logPrefix} Failed to start command: ${err.message}`);
+          reject(err);
+        });
+      });
+    };
+
+    try {
+      console.log(
+        `[helm-backend-api] Preparing local chart for tenant ${companyCode}...`
+      );
+
+      // Clean up & Create directory
+      await runSpawnAndLog("[git-setup]", "rm", ["-rf", tempChartDir]);
+      await runSpawnAndLog("[git-setup]", "mkdir", ["-p", tempChartDir]);
+
+      // Clone repo
+      await runSpawnAndLog("[git-clone]", "git", [
+        "clone",
+        "--depth=1",
+        "--filter=blob:none",
+        "--sparse",
+        chartRepoUrl,
+        tempChartDir,
+      ]);
+
+      // Sparse checkout - RUN INSIDE THE CLONED REPO
+      await runSpawnAndLog(
+        "[git-sparse]",
+        "git",
+        ["sparse-checkout", "set", backendChartSubPath],
+        {cwd: tempChartDir}
+      );
+
+      localBackendChartPath = `${tempChartDir}/${backendChartSubPath}`;
+      console.log(
+        `[helm-backend-api] Using local chart path: ${localBackendChartPath}`
+      );
+      // --- END MODIFIED GIT LOGIC ---
+
+      const backendArgs = [
+        "upgrade",
+        "--install",
+        backendReleaseName,
+        localBackendChartPath, // Use the cloned local path
+        "--namespace",
+        namespace,
+        "--set",
+        `companyCode=${companyCode}`,
+        "--set",
+        `db.serviceName=${pgReleaseName}`, // Point to the correct PG service
+        "--set",
+        `db.existingSecret=${pgReleaseName}`, // Point to the correct PG secret
+        "--set",
+        "migrationJob.enabled=true", // <-- Enable the migration Job Hook
+      ];
+      await runHelmCommandAndStream(companyCode, backendArgs, "backend-api");
+
+      // Wait for the deployment itself (which starts after the migration job succeeds)
+      await waitForResourceReady(
+        companyCode,
+        namespace,
+        "deployment",
+        `app.kubernetes.io/instance=${backendReleaseName}`,
+        180 // Adjust timeout as needed, considering migration time
+      );
+    } finally {
+      // Clean up the cloned repository regardless of success/failure
+      console.log(
+        `[helm-backend-api] Cleaning up temporary chart directory: ${tempChartDir}`
+      );
+      // Use the helper function for cleanup as well
+      await runSpawnAndLog("[git-cleanup]", "rm", ["-rf", tempChartDir]);
+    }
 
     // 3. Deploy User Frontend
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_FE);
-    const frontendHost = `app.${companyCode.toLowerCase()}.localhost`;
-    const frontendArgs = [
-      "upgrade",
-      "--install",
-      frontendReleaseName,
-      "../../helm/user-frontend",
-      "--namespace",
-      namespace,
-      "--set",
-      `companyCode=${companyCode}`,
-      "--set",
-      "ingressRoute.enabled=true",
-      "--set",
-      `ingressRoute.host=${frontendHost}`,
-      "--set",
-      `ingressRoute.backend.serviceName=${backendReleaseName}`,
-      "--set",
-      `ingressRoute.backend.middlewareNamespace=${namespace}`,
-    ]; // Add necessary values
-    await runHelmCommandAndStream(companyCode, frontendArgs, "user-frontend");
-    await waitForResourceReady(
-      companyCode,
-      namespace,
-      "deployment",
-      `app.kubernetes.io/instance=${frontendReleaseName}`,
-      180
-    );
+
+    // --- MODIFIED: Clone repo logic with better logging/error handling ---
+    const frontendChartSubPath = "helm/user-frontend";
+    // tempChartDir and runSpawnAndLog are defined above
+    let localFrontendChartPath = "";
+
+    try {
+      console.log(
+        `[helm-user-frontend] Preparing local chart for tenant ${companyCode}...`
+      );
+
+      // Clean up & Create directory
+      await runSpawnAndLog("[git-setup-fe]", "rm", ["-rf", tempChartDir]);
+      await runSpawnAndLog("[git-setup-fe]", "mkdir", ["-p", tempChartDir]);
+
+      // Clone repo
+      await runSpawnAndLog("[git-clone-fe]", "git", [
+        "clone",
+        "--depth=1",
+        "--filter=blob:none",
+        "--sparse",
+        chartRepoUrl,
+        tempChartDir,
+      ]);
+
+      // Sparse checkout - RUN INSIDE THE CLONED REPO
+      await runSpawnAndLog(
+        "[git-sparse-fe]",
+        "git",
+        ["sparse-checkout", "set", frontendChartSubPath],
+        {cwd: tempChartDir}
+      );
+
+      localFrontendChartPath = `${tempChartDir}/${frontendChartSubPath}`;
+      console.log(
+        `[helm-user-frontend] Using local chart path: ${localFrontendChartPath}`
+      );
+      // --- END MODIFIED GIT LOGIC ---
+
+      const frontendHost = `app.${companyCode.toLowerCase()}.localhost`;
+      const frontendArgs = [
+        "upgrade",
+        "--install",
+        frontendReleaseName,
+        localFrontendChartPath, // Use the cloned local path
+        "--namespace",
+        namespace,
+        "--set",
+        `companyCode=${companyCode}`,
+        "--set",
+        "ingressRoute.enabled=true",
+        "--set",
+        `ingressRoute.host=${frontendHost}`,
+        "--set",
+        `ingressRoute.backend.serviceName=${backendReleaseName}`,
+        "--set",
+        `ingressRoute.backend.middlewareNamespace=${namespace}`,
+      ];
+      await runHelmCommandAndStream(companyCode, frontendArgs, "user-frontend");
+      await waitForResourceReady(
+        companyCode,
+        namespace,
+        "deployment",
+        `app.kubernetes.io/instance=${frontendReleaseName}`,
+        180
+      );
+    } finally {
+      // Clean up the cloned repository
+      console.log(
+        `[helm-user-frontend] Cleaning up temporary chart directory: ${tempChartDir}`
+      );
+      await runSpawnAndLog("[git-cleanup-fe]", "rm", ["-rf", tempChartDir]);
+    }
     // --- End Deployment Sequence ---
 
     // Final Status: READY

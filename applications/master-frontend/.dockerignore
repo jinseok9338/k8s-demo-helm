@@ -1,0 +1,43 @@
+# Ignore node_modules, as they are handled by npm install inside the container
+node_modules
+
+# Ignore build output directory
+build
+dist
+
+# Ignore log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Ignore environment files
+.env*
+!/.env.example
+
+# Ignore Git files
+.git
+.gitignore
+
+# Ignore Docker files
+.dockerignore
+Dockerfile
+# nginx.conf
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore test reports or coverage output
+coverage
+junit.xml
+
+# Ignore IDE configuration files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw? 

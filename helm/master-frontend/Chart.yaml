@@ -1,0 +1,6 @@
+apiVersion: v2
+name: master-frontend
+description: A Helm chart for the Master Frontend application
+type: application
+version: 0.1.0
+appVersion: "0.1.1" # Corresponds to the latest Docker image tag

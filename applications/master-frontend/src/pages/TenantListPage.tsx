@@ -1,5 +1,5 @@
 // applications/master-frontend/src/pages/TenantListPage.tsx
-import React, {useState} from "react";
+import {useState} from "react";
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query"; // Import useMutation, useQueryClient
 import {Link} from "react-router"; // Import Link
 // import { Link } from 'react-router-dom'; // For linking to detail pages later
@@ -70,12 +70,13 @@ const fetchTenants = async (
   page: number,
   pageSize: number
 ): Promise<TenantsApiResponse> => {
-  // 환경 변수 사용
-  const backendUrl = import.meta.env.VITE_BACKEND_API_URL;
-  if (!backendUrl) {
-    throw new Error("VITE_BACKEND_API_URL environment variable is not set.");
-  }
-  const apiUrl = `${backendUrl}/api/tenants?page=${page}&pageSize=${pageSize}`;
+  // 환경 변수 사용 제거
+  // const backendUrl = import.meta.env.VITE_BACKEND_API_URL;
+  // if (!backendUrl) {
+  //   throw new Error("VITE_BACKEND_API_URL environment variable is not set.");
+  // }
+  // const apiUrl = `${backendUrl}/api/tenants?page=${page}&pageSize=${pageSize}`;
+  const apiUrl = `/api/tenants?page=${page}&pageSize=${pageSize}`; // Use relative path
   const response = await fetch(apiUrl);
   if (!response.ok) {
     const errorData = await response.text();
@@ -87,19 +88,21 @@ const fetchTenants = async (
 };
 
 // --- API 호출 함수들 ---
-const getBackendUrl = (): string => {
-  const url = import.meta.env.VITE_BACKEND_API_URL;
-  if (!url) {
-    throw new Error("VITE_BACKEND_API_URL environment variable is not set.");
-  }
-  return url;
-};
+// getBackendUrl 함수 제거
+// const getBackendUrl = (): string => {
+//   const url = import.meta.env.VITE_BACKEND_API_URL;
+//   if (!url) {
+//     throw new Error("VITE_BACKEND_API_URL environment variable is not set.");
+//   }
+//   return url;
+// };
 
 // Deploy (Start) Tenant
 const deployTenant = async (companyCode: string): Promise<Response> => {
-  const backendUrl = getBackendUrl();
+  // const backendUrl = getBackendUrl();
   const response = await fetch(
-    `${backendUrl}/api/tenants/${companyCode}/deploy`,
+    // `${backendUrl}/api/tenants/${companyCode}/deploy`,
+    `/api/tenants/${companyCode}/deploy`, // Use relative path
     {
       method: "POST",
     }
@@ -116,9 +119,10 @@ const deployTenant = async (companyCode: string): Promise<Response> => {
 
 // Stop Tenant
 const stopTenant = async (companyCode: string): Promise<Response> => {
-  const backendUrl = getBackendUrl();
+  // const backendUrl = getBackendUrl();
   const response = await fetch(
-    `${backendUrl}/api/tenants/${companyCode}/stop`,
+    // `${backendUrl}/api/tenants/${companyCode}/stop`,
+    `/api/tenants/${companyCode}/stop`, // Use relative path
     {
       method: "POST",
     }
@@ -134,10 +138,14 @@ const stopTenant = async (companyCode: string): Promise<Response> => {
 
 // Delete Tenant
 const deleteTenant = async (companyCode: string): Promise<Response> => {
-  const backendUrl = getBackendUrl();
-  const response = await fetch(`${backendUrl}/api/tenants/${companyCode}`, {
-    method: "DELETE",
-  });
+  // const backendUrl = getBackendUrl();
+  const response = await fetch(
+    // `${backendUrl}/api/tenants/${companyCode}`,
+    `/api/tenants/${companyCode}`, // Use relative path
+    {
+      method: "DELETE",
+    }
+  );
   if (!response.ok) {
     const errorData = await response.text();
     throw new Error(

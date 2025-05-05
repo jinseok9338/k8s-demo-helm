@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{include "master-backend.fullname" .}}
+  labels: {{- include "master-backend.labels" . | nindent 4}}
+spec:
+  type: {{.Values.service.type}}
+  ports:
+    - port: {{.Values.service.port}}
+      targetPort: http # Refers to the container port name defined in deployment.yaml
+      protocol: TCP
+      name: http
+  selector: {{- include "master-backend.selectorLabels" . | nindent 4}}
