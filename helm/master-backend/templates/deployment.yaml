@@ -43,13 +43,13 @@ spec:
           # Add liveness and readiness probes
           livenessProbe:
             httpGet:
-              path: /api/health/cluster
+              path: /api/health
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
-              path: /api/health/cluster
+              path: /api/health
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10

@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: managed-certificate-manager
+rules:
+  - apiGroups: ["networking.gke.io"]
+    resources: ["managedcertificates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""] # Core API group
+    resources: ["namespaces"]
+    verbs: ["create", "get", "list", "watch"] # Added create, get, list, watch for namespaces
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: master-backend-cert-manager-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: managed-certificate-manager
+subjects:
+  - kind: ServiceAccount
+    name: master-backend-release # Master Backend Helm 릴리스에 의해 생성된 ServiceAccount 이름
+    namespace: master

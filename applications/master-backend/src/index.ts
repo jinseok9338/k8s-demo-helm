@@ -27,6 +27,21 @@ import {
 import {spawn} from "child_process";
 
 const app = new Hono();
+
+// Custom logger middleware to filter out kube-probe requests
+const customLogger = (logFn: (message: string) => void = console.log) => {
+  return async (c: any, next: Function) => {
+    const start = Date.now();
+    await next();
+    const ms = Date.now() - start;
+    const userAgent = c.req.header("user-agent") || "";
+    // Only log if User-Agent does not start with 'kube-probe/'
+    if (!userAgent.startsWith("kube-probe/")) {
+      logFn(`${c.req.method} ${c.req.url} ${c.res.status} ${ms}ms`);
+    }
+  };
+};
+
 // Apply CORS globally or for specific paths, allowing the frontend origin
 app.use(
   "*", // Apply to all paths
@@ -38,6 +53,10 @@ app.use(
   })
 );
 // app.use("/api", cors()); // Remove or adjust this line if the global one replaces it
+
+// Apply the custom logger instead of the default one
+app.use("*", customLogger());
+
 // --- Status Constants ---
 const STATUS_PENDING = "PENDING";
 const STATUS_DEPLOYING_PG = "DEPLOYING_PG";
@@ -873,6 +892,11 @@ app.get("/api/health/cluster", async (c) => {
       503
     );
   }
+});
+
+// Add a simple health check endpoint
+app.get("/api/health", (c) => {
+  return c.text("OK");
 });
 
 app.get("/api/config/:companyCode", async (c) => {

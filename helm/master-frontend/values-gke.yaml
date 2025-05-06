@@ -18,25 +18,20 @@ ingress:
       networking.gke.io/managed-certificates: master-cert
       # Use the reserved static IP address
       kubernetes.io/ingress.global-static-ip-name: master-static-ip
-    # Define paths - frontend serves root, potentially proxies /api
-    # This depends on how the ingress controller and frontend (e.g., Nginx) are configured.
-    # Option A: Simple root path for frontend assets
+    # Define paths
+    # Option B: Define explicit paths for frontend and backend API
     paths:
       - path: "/"
         pathType: Prefix
-        # Backend service name/port will be derived by Helm for the frontend service
-    # Option B: Define explicit proxy path (if not handled by Nginx config)
-    # paths:
-    #   - path: "/"
-    #     pathType: Prefix
-    #     # backend: Service for frontend pods
-    #   - path: "/api/*" # Or /api/?*
-    #     pathType: Prefix # Or ImplementationSpecific
-    #     backend:
-    #       service:
-    #         name: master-backend-release # Helm release name of the master-backend
-    #         port:
-    #           name: http # Or number: 3001
+        # Backend for root path is the frontend service itself (implicitly handled by Helm/Ingress)
+      - path: "/api/" # Use trailing slash for prefix match
+        pathType: Prefix
+        backend:
+          service:
+            name: master-backend-release # Helm release name of the master-backend service
+            port:
+              name: http # Name of the port in the master-backend service (usually http or mapped to 3000)
+    # tls: [] # If TLS is configured
 # Service account - Typically frontend doesn't need special Workload Identity
 # serviceAccount:
 #   create: true
