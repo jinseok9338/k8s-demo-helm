@@ -24,6 +24,10 @@ import {
   V1StatefulSet,
 } from "@kubernetes/client-node"; // Import necessary modules for Helm execution and WebSocket
 import {spawn} from "child_process";
+// Import js-yaml and fs/promises
+import yaml from "js-yaml";
+import fs from "fs/promises";
+import path from "path"; // Import path for constructing file paths
 
 const app = new Hono();
 
@@ -1049,12 +1053,21 @@ function parseImage(
 }
 
 async function deployTenantInBackground(companyCode: string) {
-  // --- ADDED LOG ---
   console.log(
     `>>> deployTenantInBackground function started for ${companyCode}`
   );
-  // --- END ADDED LOG ---
   let config: Awaited<ReturnType<typeof getTenantConfig>> | null = null;
+  // Define temporary file paths outside try blocks for cleanup
+  const companyCodeLowercase = companyCode.toLowerCase(); // Ensure lowercase for filenames/domains
+  const tempDir = "/tmp"; // Use /tmp directory
+  const tempBackendValuesFile = path.join(
+    tempDir,
+    `tenant-gke-values-backend-${companyCodeLowercase}.yaml`
+  );
+  const tempFrontendValuesFile = path.join(
+    tempDir,
+    `tenant-gke-values-frontend-${companyCodeLowercase}.yaml`
+  );
 
   await updateTenantStatus(companyCode, STATUS_PENDING);
   console.log(
@@ -1084,28 +1097,24 @@ async function deployTenantInBackground(companyCode: string) {
       companyCode,
       namespace,
       "pod",
-      `app.kubernetes.io/instance=${pgReleaseName},app.kubernetes.io/name=postgresql,app.kubernetes.io/component=primary`, // More specific selector for primary pod
+      `app.kubernetes.io/instance=${pgReleaseName},app.kubernetes.io/name=postgresql,app.kubernetes.io/component=primary`,
       300
     );
 
-    // Determine environment (e.g., via an environment variable) - RESTORED
-    const KUBERNETES_ENV = process.env.KUBERNETES_ENV || "kind"; // "kind" or "gke"
-    console.log(`[ENV_DETECTION] KUBERNETES_ENV set to: ${KUBERNETES_ENV}`); // RESTORED
+    const KUBERNETES_ENV = process.env.KUBERNETES_ENV || "kind";
+    console.log(`[ENV_DETECTION] KUBERNETES_ENV set to: ${KUBERNETES_ENV}`);
 
-    // Get Tenant Image Paths from Env Vars (needed for GKE override)
-    const tenantBackendImage = process.env.TENANT_BACKEND_IMAGE; // e.g., "repo/path:tag"
-    const tenantFrontendImage = process.env.TENANT_FRONTEND_IMAGE; // e.g., "repo/path:tag"
+    const tenantBackendImage = process.env.TENANT_BACKEND_IMAGE;
+    const tenantFrontendImage = process.env.TENANT_FRONTEND_IMAGE;
 
     // 2. Deploy Backend API (with migration job enabled)
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_BE);
 
-    // --- MODIFIED: Clone repo logic with better logging/error handling ---
     const chartRepoUrl = "https://github.com/jinseok9338/k8s-demo-helm.git";
     const backendChartSubPath = "helm/backend-api";
     const tempChartDir = `/tmp/tenant-charts/${companyCode}`;
     let localBackendChartPath = "";
 
-    // Helper to run spawn and capture output/errors
     const runSpawnAndLog = async (
       logPrefix: string,
       cmd: string,
@@ -1149,16 +1158,14 @@ async function deployTenantInBackground(companyCode: string) {
       });
     };
 
+    let backendHelmExecuted = false; // Flag to track if helm command was attempted
+
     try {
       console.log(
         `[helm-backend-api] Preparing local chart for tenant ${companyCode}...`
       );
-
-      // Clean up & Create directory
       await runSpawnAndLog("[git-setup]", "rm", ["-rf", tempChartDir]);
       await runSpawnAndLog("[git-setup]", "mkdir", ["-p", tempChartDir]);
-
-      // Clone repo
       await runSpawnAndLog("[git-clone]", "git", [
         "clone",
         "--depth=1",
@@ -1167,20 +1174,16 @@ async function deployTenantInBackground(companyCode: string) {
         chartRepoUrl,
         tempChartDir,
       ]);
-
-      // Sparse checkout - RUN INSIDE THE CLONED REPO
       await runSpawnAndLog(
         "[git-sparse]",
         "git",
         ["sparse-checkout", "set", backendChartSubPath],
         {cwd: tempChartDir}
       );
-
       localBackendChartPath = `${tempChartDir}/${backendChartSubPath}`;
       console.log(
         `[helm-backend-api] Using local chart path: ${localBackendChartPath}`
       );
-      // --- END MODIFIED GIT LOGIC ---
 
       const backendArgs = [
         "upgrade",
@@ -1198,13 +1201,11 @@ async function deployTenantInBackground(companyCode: string) {
         "--set",
         "migrationJob.enabled=true",
       ];
-      let backendCertName = ""; // Initialize cert name
 
       if (KUBERNETES_ENV === "gke") {
-        const backendApiHost = `api.${companyCode.toLowerCase()}.jinseok9338.info`;
-        backendCertName = `${backendReleaseName}-cert`;
+        const backendApiHost = `api.${companyCodeLowercase}.jinseok9338.info`;
+        const backendCertName = `${backendReleaseName}-cert`;
 
-        // Create ManagedCertificate BEFORE Helm install
         await createOrUpdateManagedCertificate(
           namespace,
           backendCertName,
@@ -1217,36 +1218,44 @@ async function deployTenantInBackground(companyCode: string) {
             "GKE environment detected, but TENANT_BACKEND_IMAGE env var is missing or invalid."
           );
         }
-        console.log(
-          `[GKE Override] Setting Backend Image: ${tenantBackendImage}`
-        );
-        backendArgs.push(
-          "--set",
-          `image.repository=${parsedBackendImage.repository}`,
-          "--set",
-          `image.tag=${parsedBackendImage.tag}`,
-          "--set",
-          `migrationJob.image.repository=${parsedBackendImage.repository}`,
-          "--set",
-          `migrationJob.image.tag=${parsedBackendImage.tag}`
-        );
 
-        backendArgs.push(
-          "--set",
-          "ingress.type=kubernetes",
-          "--set",
-          "ingress.kubernetes.enabled=true",
-          "--set",
-          `ingress.kubernetes.hostname=${backendApiHost}`,
-          "--set",
-          "ingress.kubernetes.path=/",
-          // Revert to direct key setting with escaped dots
-          "--set",
-          `ingress.kubernetes.annotations.networking\.gke\.io/managed-certificates=${backendCertName}`
+        // Define GKE overrides as a JavaScript object
+        const gkeBackendOverrides = {
+          image: {
+            repository: parsedBackendImage.repository,
+            tag: parsedBackendImage.tag,
+          },
+          migrationJob: {
+            image: {
+              repository: parsedBackendImage.repository,
+              tag: parsedBackendImage.tag,
+            },
+          },
+          ingress: {
+            type: "kubernetes",
+            kubernetes: {
+              enabled: true,
+              hostname: backendApiHost,
+              path: "/",
+              annotations: {
+                "networking.gke.io/managed-certificates": backendCertName,
+              },
+            },
+          },
+        };
+
+        // Convert object to YAML and write to temporary file
+        const yamlContent = yaml.dump(gkeBackendOverrides);
+        console.log(
+          `[helm-backend-api] Writing temporary GKE values to ${tempBackendValuesFile}`
         );
+        await fs.writeFile(tempBackendValuesFile, yamlContent, "utf8");
+
+        // Add the temporary values file to Helm args
+        backendArgs.push("-f", tempBackendValuesFile);
       } else {
-        // Kind (Traefik)
-        const backendApiHostTraefik = `api.${companyCode.toLowerCase()}.localhost`;
+        // Kind (Traefik) Args - No changes here
+        const backendApiHostTraefik = `api.${companyCodeLowercase}.localhost`;
         backendArgs.push(
           "--set",
           "ingress.type=traefik",
@@ -1258,45 +1267,55 @@ async function deployTenantInBackground(companyCode: string) {
           "ingress.traefik.middleware.stripPrefix.enabled=false"
         );
       }
-      // --- END RESTORED backend args ---
 
+      // Execute Helm command
       await runHelmCommandAndStream(companyCode, backendArgs, "backend-api");
+      backendHelmExecuted = true; // Mark helm command as attempted/executed
 
-      // Wait for the deployment itself (which starts after the migration job succeeds)
+      // Wait for deployment readiness
       await waitForResourceReady(
         companyCode,
         namespace,
         "deployment",
         `app.kubernetes.io/instance=${backendReleaseName}`,
-        180 // Adjust timeout as needed, considering migration time
+        180
       );
     } finally {
-      // Clean up the cloned repository regardless of success/failure
-      console.log(
-        `[helm-backend-api] Cleaning up temporary chart directory: ${tempChartDir}`
-      );
-      // Use the helper function for cleanup as well
-      await runSpawnAndLog("[git-cleanup]", "rm", ["-rf", tempChartDir]);
+      // Clean up temporary Helm chart directory
+      if (localBackendChartPath) {
+        console.log(
+          `[helm-backend-api] Cleaning up temporary chart directory: ${tempChartDir}`
+        );
+        await runSpawnAndLog("[git-cleanup]", "rm", ["-rf", tempChartDir]);
+      }
+      // Clean up temporary values file only if GKE and helm was executed
+      if (process.env.KUBERNETES_ENV === "gke" && backendHelmExecuted) {
+        try {
+          console.log(
+            `[helm-backend-api] Deleting temporary values file: ${tempBackendValuesFile}`
+          );
+          await fs.unlink(tempBackendValuesFile);
+        } catch (unlinkError: any) {
+          console.error(
+            `[helm-backend-api] Warning: Failed to delete temporary values file ${tempBackendValuesFile}: ${unlinkError.message}`
+          );
+        }
+      }
     }
 
     // 3. Deploy User Frontend
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_FE);
 
-    // --- MODIFIED: Clone repo logic with better logging/error handling for frontend ---
     const frontendChartSubPath = "helm/user-frontend";
-    // tempChartDir and runSpawnAndLog are defined above
     let localFrontendChartPath = "";
+    let frontendHelmExecuted = false; // Flag for frontend cleanup
 
     try {
       console.log(
         `[helm-user-frontend] Preparing local chart for tenant ${companyCode}...`
       );
-
-      // Clean up & Create directory
-      await runSpawnAndLog("[git-setup-fe]", "rm", ["-rf", tempChartDir]);
+      await runSpawnAndLog("[git-setup-fe]", "rm", ["-rf", tempChartDir]); // Clean first
       await runSpawnAndLog("[git-setup-fe]", "mkdir", ["-p", tempChartDir]);
-
-      // Clone repo
       await runSpawnAndLog("[git-clone-fe]", "git", [
         "clone",
         "--depth=1",
@@ -1305,22 +1324,17 @@ async function deployTenantInBackground(companyCode: string) {
         chartRepoUrl,
         tempChartDir,
       ]);
-
-      // Sparse checkout - RUN INSIDE THE CLONED REPO
       await runSpawnAndLog(
         "[git-sparse-fe]",
         "git",
         ["sparse-checkout", "set", frontendChartSubPath],
         {cwd: tempChartDir}
       );
-
       localFrontendChartPath = `${tempChartDir}/${frontendChartSubPath}`;
       console.log(
         `[helm-user-frontend] Using local chart path: ${localFrontendChartPath}`
       );
-      // --- END MODIFIED GIT LOGIC ---
 
-      let frontendHost = "";
       const frontendArgs = [
         "upgrade",
         "--install",
@@ -1329,15 +1343,14 @@ async function deployTenantInBackground(companyCode: string) {
         "--namespace",
         namespace,
         "--set",
-        `companyCode=${companyCode}`,
+        `companyCode=${companyCode}`, // Keep non-GKE specific args
       ];
-      let frontendCertName = ""; // Initialize cert name
+      let frontendHost = "";
 
       if (KUBERNETES_ENV === "gke") {
-        frontendHost = `app.${companyCode.toLowerCase()}.jinseok9338.info`;
-        frontendCertName = `${frontendReleaseName}-cert`;
+        frontendHost = `app.${companyCodeLowercase}.jinseok9338.info`;
+        const frontendCertName = `${frontendReleaseName}-cert`;
 
-        // Create ManagedCertificate BEFORE Helm install
         await createOrUpdateManagedCertificate(
           namespace,
           frontendCertName,
@@ -1350,48 +1363,54 @@ async function deployTenantInBackground(companyCode: string) {
             "GKE environment detected, but TENANT_FRONTEND_IMAGE env var is missing or invalid."
           );
         }
-        console.log(
-          `[GKE Override] Setting Frontend Image: ${tenantFrontendImage}`
-        );
-        frontendArgs.push(
-          "--set",
-          `image.repository=${parsedFrontendImage.repository}`,
-          "--set",
-          `image.tag=${parsedFrontendImage.tag}`
-        );
 
-        frontendArgs.push(
-          "--set",
-          "ingress.type=kubernetes",
-          "--set",
-          "ingress.kubernetes.enabled=true",
-          "--set",
-          `ingress.kubernetes.hostname=${frontendHost}`,
-          // Revert to direct key setting with escaped dots
-          "--set",
-          `ingress.kubernetes.annotations.networking\.gke\.io/managed-certificates=${frontendCertName}`
+        // Define GKE overrides for frontend
+        const gkeFrontendOverrides = {
+          image: {
+            repository: parsedFrontendImage.repository,
+            tag: parsedFrontendImage.tag,
+          },
+          ingress: {
+            type: "kubernetes",
+            kubernetes: {
+              enabled: true,
+              hostname: frontendHost,
+              path: "/",
+              annotations: {
+                "networking.gke.io/managed-certificates": frontendCertName,
+              },
+            },
+          },
+        };
+
+        // Write temporary values file
+        const yamlContent = yaml.dump(gkeFrontendOverrides);
+        console.log(
+          `[helm-user-frontend] Writing temporary GKE values to ${tempFrontendValuesFile}`
         );
+        await fs.writeFile(tempFrontendValuesFile, yamlContent, "utf8");
+
+        frontendArgs.push("-f", tempFrontendValuesFile);
       } else {
-        // Kind (Traefik)
-        frontendHost = `app.${companyCode.toLowerCase()}.localhost`;
+        // Kind (Traefik) Args - No changes here
+        frontendHost = `app.${companyCodeLowercase}.localhost`;
         frontendArgs.push(
           "--set",
           "ingress.type=traefik",
           "--set",
-          "ingressRoute.enabled=true", // Verify this path in user-frontend values/template if needed
+          "ingressRoute.enabled=true",
           "--set",
-          `ingressRoute.host=${frontendHost}`, // Verify this path
-          // Revert to direct key setting with escaped dots
-          "--set",
-          `ingressRoute.annotations.networking\.gke\.io/managed-certificates=${frontendCertName}`
+          `ingressRoute.host=${frontendHost}`
+          // Note: Removed incorrect annotation set attempt for Traefik here
         );
       }
-      // --- END RESTORED frontend args ---
 
       console.log(
         `[helm-user-frontend] Deploying for env: ${KUBERNETES_ENV} with host: ${frontendHost}`
       );
       await runHelmCommandAndStream(companyCode, frontendArgs, "user-frontend");
+      frontendHelmExecuted = true; // Mark helm command as attempted/executed
+
       await waitForResourceReady(
         companyCode,
         namespace,
@@ -1400,13 +1419,27 @@ async function deployTenantInBackground(companyCode: string) {
         180
       );
     } finally {
-      // Clean up the cloned repository
-      console.log(
-        `[helm-user-frontend] Cleaning up temporary chart directory: ${tempChartDir}`
-      );
-      await runSpawnAndLog("[git-cleanup-fe]", "rm", ["-rf", tempChartDir]);
+      // Clean up temporary Helm chart directory
+      if (localFrontendChartPath) {
+        console.log(
+          `[helm-user-frontend] Cleaning up temporary chart directory: ${tempChartDir}`
+        );
+        await runSpawnAndLog("[git-cleanup-fe]", "rm", ["-rf", tempChartDir]);
+      }
+      // Clean up temporary values file
+      if (process.env.KUBERNETES_ENV === "gke" && frontendHelmExecuted) {
+        try {
+          console.log(
+            `[helm-user-frontend] Deleting temporary values file: ${tempFrontendValuesFile}`
+          );
+          await fs.unlink(tempFrontendValuesFile);
+        } catch (unlinkError: any) {
+          console.error(
+            `[helm-user-frontend] Warning: Failed to delete temporary values file ${tempFrontendValuesFile}: ${unlinkError.message}`
+          );
+        }
+      }
     }
-    // --- End Deployment Sequence ---
 
     // Final Status: READY
     await updateTenantStatus(companyCode, STATUS_READY);
@@ -1421,6 +1454,21 @@ async function deployTenantInBackground(companyCode: string) {
     // Final Status: FAILED
     await updateTenantStatus(companyCode, STATUS_FAILED);
     // Error already logged inside helpers
+  } finally {
+    // Extra safety: attempt cleanup of temp files again in the outermost finally block
+    if (process.env.KUBERNETES_ENV === "gke") {
+      // Check process.env directly
+      try {
+        await fs.unlink(tempBackendValuesFile);
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        await fs.unlink(tempFrontendValuesFile);
+      } catch (e) {
+        /* ignore */
+      }
+    }
   }
 }
 // --- End Background Deployment Logic ---

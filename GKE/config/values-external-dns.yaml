@@ -1,0 +1,55 @@
+# values-external-dns.yaml
+# Helm values for ExternalDNS deployment on GKE using Google Cloud DNS
+
+# RBAC: Allow Helm to create necessary roles and bindings
+rbac:
+  create: true
+  # clusterRole: true # Set to true if managing resources across namespaces (needed for most Ingress setups)
+
+# Service Account: Create a KSA and link to GSA via Workload Identity
+serviceAccount:
+  create: true
+  name: "external-dns" # Name of the KSA to create in the external-dns namespace
+  annotations:
+    # Replace YOUR_PROJECT_ID with the actual project ID
+    iam.gke.io/gcp-service-account: "external-dns-gsa@nth-circlet-458901-h9.iam.gserviceaccount.com"
+
+# Provider Configuration: Use Google Cloud DNS
+provider: google
+
+google:
+  # Replace YOUR_PROJECT_ID with the actual project ID
+  project: "nth-circlet-458901-h9"
+  # Credentials file path is not needed when using Workload Identity
+  # credentials: ""
+
+# Policy: How ExternalDNS handles records (sync = create/update/delete)
+policy: sync
+
+# Sources: What Kubernetes resources to monitor for DNS records
+# Default is service and ingress, which is usually sufficient
+sources:
+  - service
+  - ingress
+  # - crd # Enable if using CRDs like DNSEndpoint
+
+# Domain Filter: Only manage records for this domain
+domainFilters:
+  - "jinseok9338.info"
+
+# TXT Owner ID: Unique ID to identify records managed by this ExternalDNS instance
+# Helps prevent conflicts if multiple instances manage the same zone
+txtOwnerId: "master-dashboard-cluster-dns" # Example ID, can be customized
+
+# Optional: Log level and sync interval
+logLevel: info
+# interval: "1m"
+
+# Optional: Adjust resource requests/limits if needed
+# resources:
+#   requests:
+#     cpu: 10m
+#     memory: 20Mi
+#   limits:
+#     cpu: 100m
+#     memory: 100Mi
