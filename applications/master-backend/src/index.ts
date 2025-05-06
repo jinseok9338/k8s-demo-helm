@@ -929,6 +929,29 @@ app.post("/api/tenants/:companyCode/deploy", async (c) => {
 });
 
 // --- Background Deployment Logic (Modified with DB Status Updates) ---
+// Helper function to parse image string into repo and tag
+function parseImage(
+  imageString: string | undefined
+): {repository: string; tag: string} | null {
+  if (!imageString) return null;
+  const lastColonIndex = imageString.lastIndexOf(":");
+  if (
+    lastColonIndex === -1 ||
+    lastColonIndex === 0 ||
+    lastColonIndex === imageString.length - 1
+  ) {
+    // Invalid format or tag is missing
+    console.error(
+      `[parseImage] Invalid image format or missing tag: ${imageString}`
+    );
+    return null;
+  }
+  return {
+    repository: imageString.substring(0, lastColonIndex),
+    tag: imageString.substring(lastColonIndex + 1),
+  };
+}
+
 async function deployTenantInBackground(companyCode: string) {
   // --- ADDED LOG ---
   console.log(
@@ -936,44 +959,16 @@ async function deployTenantInBackground(companyCode: string) {
   );
   // --- END ADDED LOG ---
   let config: Awaited<ReturnType<typeof getTenantConfig>> | null = null;
-  // let initialAdminEmail: string | null | undefined = null; // Removed: Column does not exist in schema
 
-  // Initial Status: PENDING
   await updateTenantStatus(companyCode, STATUS_PENDING);
   console.log(
     `Deployment process started for ${companyCode}: Fetching tenant configuration...`
   );
 
   try {
-    // Fetch tenant config including release names and namespace
     config = await getTenantConfig(companyCode);
     const {namespace, pgReleaseName, backendReleaseName, frontendReleaseName} =
       config;
-
-    // --- REMOVED: Fetch initial admin email from the database (column missing) ---
-    // try {
-    //   const tenantData = await db.query.tenants.findFirst({
-    //     where: eq(schema.tenants.companyCode, companyCode),
-    //     columns: {
-    //       initialAdminEmail: true, // Assuming this column exists in your schema
-    //     },
-    //   });
-    //   initialAdminEmail = tenantData?.initialAdminEmail;
-    //   if (!initialAdminEmail) {
-    //     console.warn(`Initial admin email not found in DB for tenant ${companyCode}. Using default or empty.`);
-    //   } else {
-    //     console.log(`Found initial admin email for ${companyCode}: ${initialAdminEmail}`);
-    //   }
-    // } catch (dbError) {
-    //   console.error(`Error fetching initial admin email for ${companyCode}:`, dbError);
-    // }
-    // --- End REMOVED ---
-
-    console.log(
-      `Deployment for ${companyCode}: Configuration found for namespace ${namespace}. Starting deployment steps...`
-    );
-
-    // --- Execute Deployment Sequence with Readiness Checks and Status Updates ---
 
     // 1. Deploy PostgreSQL
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_PG);
@@ -1000,6 +995,10 @@ async function deployTenantInBackground(companyCode: string) {
     // Determine environment (e.g., via an environment variable) - RESTORED
     const KUBERNETES_ENV = process.env.KUBERNETES_ENV || "kind"; // "kind" or "gke"
     console.log(`[ENV_DETECTION] KUBERNETES_ENV set to: ${KUBERNETES_ENV}`); // RESTORED
+
+    // Get Tenant Image Paths from Env Vars (needed for GKE override)
+    const tenantBackendImage = process.env.TENANT_BACKEND_IMAGE; // e.g., "repo/path:tag"
+    const tenantFrontendImage = process.env.TENANT_FRONTEND_IMAGE; // e.g., "repo/path:tag"
 
     // 2. Deploy Backend API (with migration job enabled)
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_BE);
@@ -1107,6 +1106,28 @@ async function deployTenantInBackground(companyCode: string) {
       // --- RESTORED Conditional backend args ---
       if (KUBERNETES_ENV === "gke") {
         const backendApiHost = `api.${companyCode.toLowerCase()}.jinseok9338.info`;
+        // *** ADDED GKE Image Override ***
+        const parsedBackendImage = parseImage(tenantBackendImage);
+        if (!parsedBackendImage) {
+          throw new Error(
+            "GKE environment detected, but TENANT_BACKEND_IMAGE env var is missing or invalid."
+          );
+        }
+        console.log(
+          `[GKE Override] Setting Backend Image: ${tenantBackendImage}`
+        );
+        backendArgs.push(
+          "--set",
+          `image.repository=${parsedBackendImage.repository}`,
+          "--set",
+          `image.tag=${parsedBackendImage.tag}`,
+          "--set",
+          `migrationJob.image.repository=${parsedBackendImage.repository}`,
+          "--set",
+          `migrationJob.image.tag=${parsedBackendImage.tag}`
+        );
+        // *** END ADDED ***
+
         backendArgs.push(
           "--set",
           "ingress.type=kubernetes",
@@ -1208,6 +1229,24 @@ async function deployTenantInBackground(companyCode: string) {
       // --- RESTORED Conditional frontend args (Option B - separate hosts) ---
       if (KUBERNETES_ENV === "gke") {
         frontendHost = `app.${companyCode.toLowerCase()}.jinseok9338.info`;
+        // *** ADDED GKE Image Override ***
+        const parsedFrontendImage = parseImage(tenantFrontendImage);
+        if (!parsedFrontendImage) {
+          throw new Error(
+            "GKE environment detected, but TENANT_FRONTEND_IMAGE env var is missing or invalid."
+          );
+        }
+        console.log(
+          `[GKE Override] Setting Frontend Image: ${tenantFrontendImage}`
+        );
+        frontendArgs.push(
+          "--set",
+          `image.repository=${parsedFrontendImage.repository}`,
+          "--set",
+          `image.tag=${parsedFrontendImage.tag}`
+        );
+        // *** END ADDED ***
+
         frontendArgs.push(
           "--set",
           "ingress.type=kubernetes",

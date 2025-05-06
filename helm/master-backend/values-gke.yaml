@@ -12,7 +12,7 @@ environmentType: "gke"
 # Override Master Backend image to use Artifact Registry
 image:
   repository: asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/master-backend # Replace with your actual AR path
-  tag: "0.1.8" # Replace with the actual tag pushed to AR (e.g., from 6-BuildAndPushImages.sh)
+  tag: "0.1.9" # Updated tag for the new build
   pullPolicy: IfNotPresent # Or Always
 
 # Service Account annotations for Workload Identity

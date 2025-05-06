@@ -24,13 +24,13 @@ RUN helm repo add bitnami https://charts.bitnami.com/bitnami
 WORKDIR /app
 
 # Copy package files and install all dependencies
-COPY applications/master-backend/package*.json ./
+COPY ./package*.json ./
 RUN npm install
 
 # Copy the rest of the application code (source and tsconfig)
-COPY applications/master-backend/src ./src
-COPY applications/master-backend/tsconfig.json ./
-COPY applications/master-backend/.env ./
+COPY ./src ./src
+COPY ./tsconfig.json ./
+
 
 # Build TypeScript code
 RUN npm run build

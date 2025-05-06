@@ -64,12 +64,29 @@ kubectl create secret generic $SECRET_NAME \
 
 echo "Secret '$SECRET_NAME' created successfully."
 
+# --- Step 5: Create ManagedCertificate for Ingress --- 
+echo "\nChecking/Creating ManagedCertificate 'master-cert' for domain master.jinseok9338.info..."
+CERT_YAML="apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: master-cert
+  namespace: $NAMESPACE
+spec:
+  domains:
+    - master.jinseok9338.info"
+
+# Use apply to create or update the certificate resource idempotently
+echo "$CERT_YAML" | kubectl apply -f -
+
+echo "ManagedCertificate 'master-cert' applied."
+
 # Unset password variable for security
 unset DB_PASSWORD
 unset DATABASE_URL
 
 echo "\n-----------------------------------------------------"
-echo "Namespace and Database Secret Preparation Completed!"
+echo "Namespace, Database Secret, and Managed Certificate Preparation Completed!"
 echo "Namespace: $NAMESPACE"
 echo "Secret Name: $SECRET_NAME (Key: $SECRET_KEY)"
+echo "Certificate Name: master-cert (Domain: master.jinseok9338.info)"
 echo "-----------------------------------------------------" 
