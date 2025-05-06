@@ -1375,7 +1375,21 @@ async function deployTenantInBackground(companyCode: string) {
             kubernetes: {
               enabled: true,
               hostname: frontendHost,
-              path: "/",
+              // Define multiple paths for the frontend ingress
+              paths: [
+                {
+                  path: "/",
+                  pathType: "Prefix",
+                  serviceName: frontendReleaseName, // Route root to frontend service
+                  servicePort: 80,
+                },
+                {
+                  path: "/api",
+                  pathType: "Prefix",
+                  serviceName: backendReleaseName, // Route /api to backend service
+                  servicePort: 80, // Assuming backend service also uses port 80
+                },
+              ],
               annotations: {
                 "networking.gke.io/managed-certificates": frontendCertName,
               },

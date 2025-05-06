@@ -14,7 +14,7 @@ REGION="asia-northeast3"
 REPO_NAME="master-apps-repo" # Artifact Registry repository name
 
 # Image Tags (Update these to the desired versions)
-MASTER_BACKEND_TAG="0.1.18" # Updated to the latest version built
+MASTER_BACKEND_TAG="0.1.19" # Updated to the latest version built
 MASTER_FRONTEND_TAG="0.1.1" # Check if this is the correct version
 TENANT_BACKEND_TAG="0.1.0"  # Check if this is the correct version for backend-api-poc
 TENANT_FRONTEND_TAG="v0.2.0" # Check if this is the correct version for front-end-user

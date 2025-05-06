@@ -23,9 +23,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "user-frontend.fullname" $ }}
+                name: {{ .serviceName }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ .servicePort }}
           {{- end }}
   {{- if .Values.ingress.kubernetes.tls }}
   tls:
