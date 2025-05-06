@@ -928,7 +928,89 @@ app.post("/api/tenants/:companyCode/deploy", async (c) => {
   });
 });
 
-// --- Background Deployment Logic (Modified with DB Status Updates) ---
+// --- NEW Helper Function: Create or Update ManagedCertificate ---
+async function createOrUpdateManagedCertificate(
+  namespace: string,
+  certName: string,
+  domain: string
+): Promise<void> {
+  const prefix = `[kube-cert]`;
+  console.log(
+    `${prefix} Ensuring ManagedCertificate '${certName}' exists for domain '${domain}' in namespace '${namespace}'...`
+  );
+
+  const certManifest = {
+    apiVersion: "networking.gke.io/v1",
+    kind: "ManagedCertificate",
+    metadata: {
+      name: certName,
+      namespace: namespace,
+    },
+    spec: {
+      domains: [domain],
+    },
+  };
+
+  try {
+    const command = "kubectl";
+    const args = ["apply", "-n", namespace, "-f", "-"];
+    const manifestString = JSON.stringify(certManifest);
+
+    console.log(
+      `${prefix} Applying ManagedCertificate manifest:`,
+      manifestString
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const process = spawn(command, args, {stdio: ["pipe", "pipe", "pipe"]});
+      let stdoutData = "";
+      let stderrData = "";
+
+      process.stdout?.on("data", (data) => (stdoutData += data.toString()));
+      process.stderr?.on("data", (data) => (stderrData += data.toString()));
+
+      process.on("close", (code) => {
+        console.log(`${prefix} kubectl apply stdout:\n${stdoutData}`);
+        if (stderrData) {
+          console.error(`${prefix} kubectl apply stderr:\n${stderrData}`);
+        }
+        if (code === 0) {
+          console.log(
+            `${prefix} ManagedCertificate '${certName}' applied successfully.`
+          );
+          resolve();
+        } else {
+          console.error(`${prefix} kubectl apply failed with code ${code}.`);
+          reject(
+            new Error(
+              `Failed to apply ManagedCertificate '${certName}' (code ${code})`
+            )
+          );
+        }
+      });
+      process.on("error", (err) => {
+        console.error(
+          `${prefix} Failed to start kubectl process: ${err.message}`
+        );
+        reject(err);
+      });
+
+      // Pipe the manifest string to stdin
+      process.stdin?.write(manifestString);
+      process.stdin?.end();
+    });
+  } catch (error: any) {
+    console.error(
+      `${prefix} Failed to create/update ManagedCertificate '${certName}' for domain '${domain}':`,
+      error
+    );
+    throw new Error(
+      `Failed to ensure ManagedCertificate '${certName}': ${error.message}`
+    );
+  }
+}
+// --- End NEW Helper Function ---
+
 // Helper function to parse image string into repo and tag
 function parseImage(
   imageString: string | undefined
@@ -1102,11 +1184,19 @@ async function deployTenantInBackground(companyCode: string) {
         "--set",
         "migrationJob.enabled=true",
       ];
+      let backendCertName = ""; // Initialize cert name
 
-      // --- RESTORED Conditional backend args ---
       if (KUBERNETES_ENV === "gke") {
         const backendApiHost = `api.${companyCode.toLowerCase()}.jinseok9338.info`;
-        // *** ADDED GKE Image Override ***
+        backendCertName = `${backendReleaseName}-cert`;
+
+        // Create ManagedCertificate BEFORE Helm install
+        await createOrUpdateManagedCertificate(
+          namespace,
+          backendCertName,
+          backendApiHost
+        );
+
         const parsedBackendImage = parseImage(tenantBackendImage);
         if (!parsedBackendImage) {
           throw new Error(
@@ -1126,7 +1216,6 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           `migrationJob.image.tag=${parsedBackendImage.tag}`
         );
-        // *** END ADDED ***
 
         backendArgs.push(
           "--set",
@@ -1136,7 +1225,10 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           `ingress.kubernetes.hostname=${backendApiHost}`,
           "--set",
-          "ingress.kubernetes.path=/"
+          "ingress.kubernetes.path=/",
+          // Inject certificate annotation via --set
+          "--set",
+          `ingress.kubernetes.annotations.['networking\.gke\.io/managed-certificates']=${backendCertName}`
         );
       } else {
         // Kind (Traefik)
@@ -1149,7 +1241,7 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           `ingress.traefik.ingressRoute.host=${backendApiHostTraefik}`,
           "--set",
-          "ingress.traefik.middleware.stripPrefix.enabled=false" // Assuming API root path
+          "ingress.traefik.middleware.stripPrefix.enabled=false"
         );
       }
       // --- END RESTORED backend args ---
@@ -1225,11 +1317,19 @@ async function deployTenantInBackground(companyCode: string) {
         "--set",
         `companyCode=${companyCode}`,
       ];
+      let frontendCertName = ""; // Initialize cert name
 
-      // --- RESTORED Conditional frontend args (Option B - separate hosts) ---
       if (KUBERNETES_ENV === "gke") {
         frontendHost = `app.${companyCode.toLowerCase()}.jinseok9338.info`;
-        // *** ADDED GKE Image Override ***
+        frontendCertName = `${frontendReleaseName}-cert`;
+
+        // Create ManagedCertificate BEFORE Helm install
+        await createOrUpdateManagedCertificate(
+          namespace,
+          frontendCertName,
+          frontendHost
+        );
+
         const parsedFrontendImage = parseImage(tenantFrontendImage);
         if (!parsedFrontendImage) {
           throw new Error(
@@ -1245,7 +1345,6 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           `image.tag=${parsedFrontendImage.tag}`
         );
-        // *** END ADDED ***
 
         frontendArgs.push(
           "--set",
@@ -1253,7 +1352,10 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           "ingress.kubernetes.enabled=true",
           "--set",
-          `ingress.kubernetes.hostname=${frontendHost}`
+          `ingress.kubernetes.hostname=${frontendHost}`,
+          // Inject certificate annotation via --set
+          "--set",
+          `ingress.kubernetes.annotations.['networking\.gke\.io/managed-certificates']=${frontendCertName}`
         );
       } else {
         // Kind (Traefik)
@@ -1261,14 +1363,10 @@ async function deployTenantInBackground(companyCode: string) {
         frontendArgs.push(
           "--set",
           "ingress.type=traefik",
-          // Note: For Option B, Traefik might not need backend/middleware settings here
-          // if user-frontend only handles its own host now.
-          // Let's assume the user-frontend's ingressRoute template was also simplified.
-          // If not, restore the backend/middlewareNamespace sets as needed.
           "--set",
-          "ingressRoute.enabled=true", // This path might be wrong, should be ingress.traefik.ingressRoute.enabled based on values?
+          "ingressRoute.enabled=true", // Verify this path in user-frontend values/template if needed
           "--set",
-          `ingressRoute.host=${frontendHost}` // This path might be wrong, should be ingress.traefik.ingressRoute.host? Let's assume old paths for now for simplicity, needs verification with user-frontend chart.
+          `ingressRoute.host=${frontendHost}` // Verify this path
         );
       }
       // --- END RESTORED frontend args ---
