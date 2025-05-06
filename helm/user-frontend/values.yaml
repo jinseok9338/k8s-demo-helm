@@ -8,15 +8,15 @@ companyCode: "" # No longer needed for ingressRoute
 # --- Ingress Configuration --- RESTORED
 ingress:
   # Type of Ingress to create: "kubernetes" or "traefik"
-  type: "kubernetes" # Default to Kubernetes standard Ingress
+  type: traefik
 
   # --- Settings for Standard Kubernetes Ingress (when ingress.type is "kubernetes") --- RESTORED
   kubernetes:
-    enabled: true
+    enabled: false
     className: ""
     annotations: {}
-    hostname: "user.example.com" # OVERRIDDEN by master-backend
-    path: "/" # Default path for frontend
+    hostname: ""
+    path: "/"
     pathType: Prefix
     # Removed apiPath, apiBackendServiceName, apiBackendServicePort as per Option B
     paths:
@@ -28,14 +28,7 @@ ingress:
   traefik:
     ingressRoute:
       enabled: true
-      host: "app.user.localhost" # OVERRIDDEN by master-backend
-      entryPoints: ["web"]
-      # For Option B, user-frontend IngressRoute usually doesn't need backend/middleware settings
-    # backend:
-    #   serviceName: "backend-api"
-    #   port: 3000
-    #   middlewareName: "backend-api-stripprefix-api"
-    #   middlewareNamespace: "needs-dynamic-value"
+      host: "app.localhost"
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2

@@ -3,6 +3,9 @@
 # Add an env section for environment variables - RESTORED
 env:
   KUBERNETES_ENV: "gke"
+  # Add tenant image paths here
+  TENANT_BACKEND_IMAGE: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/backend-api-poc:0.1.0"
+  TENANT_FRONTEND_IMAGE: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/front-end-user:v0.2.0"
 
 # GKE specific values for master-backend
 
@@ -53,10 +56,10 @@ ingress:
     #     # Backend service is automatically determined by Helm
 
 # Tenant Image Paths for GKE (to be injected as env vars)
-tenantImages:
-  # Replace with the actual AR paths and tags for tenant images
-  backend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/backend-api-poc:0.1.0" # Check tag used in 6-BuildAndPushImages.sh
-  frontend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/front-end-user:v0.2.0" # Check tag for frontend user
+#tenantImages:  # Commented out as we use env vars now
+#  # Replace with the actual AR paths and tags for tenant images
+#  backend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/backend-api-poc:0.1.0" # Check tag used in 6-BuildAndPushImages.sh
+#  frontend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/front-end-user:v0.2.0" # Check tag for frontend user
 
 # Database secret name (should match the one created in script 7)
 databaseSecretName: "master-db-secret"

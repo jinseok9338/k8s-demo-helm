@@ -1,5 +1,4 @@
 import {Hono} from "hono";
-import {logger} from "hono/logger";
 import {serve} from "@hono/node-server";
 import "dotenv/config";
 
@@ -34,10 +33,11 @@ const customLogger = (logFn: (message: string) => void = console.log) => {
     const start = Date.now();
     await next();
     const ms = Date.now() - start;
-    const userAgent = c.req.header("user-agent") || "";
-    // Only log if User-Agent does not start with 'kube-probe/'
-    if (!userAgent.startsWith("kube-probe/")) {
-      logFn(`${c.req.method} ${c.req.url} ${c.res.status} ${ms}ms`);
+    // Only log if the path is NOT /api/health/cluster
+    if (c.req.path !== "/api/health/cluster") {
+      logFn(
+        `${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms` // Use c.req.path for accuracy
+      );
     }
   };
 };
@@ -54,7 +54,7 @@ app.use(
 );
 // app.use("/api", cors()); // Remove or adjust this line if the global one replaces it
 
-// Apply the custom logger instead of the default one
+// Apply the custom logger
 app.use("*", customLogger());
 
 // --- Status Constants ---
@@ -439,7 +439,7 @@ const pool = new Pool({
 const db = drizzle(pool, {schema});
 
 // Middleware
-app.use("*", logger());
+// app.use("*", logger());
 
 // --- Helper Function to Check Deployment/StatefulSet Status ---
 interface ServiceStatus {
@@ -865,11 +865,6 @@ app.get("/api/health/cluster", async (c) => {
     const cluster = kc.getCurrentCluster();
     const user = kc.getCurrentUser();
 
-    // Log verbose info to console as well
-    console.log(
-      `Cluster health check successful: Context='${currentContext}', Server='${cluster?.server}', User='${user?.name}', Version='${versionInfo.gitVersion}'`
-    );
-
     return c.json({
       status: "ok",
       message: "Connected to Kubernetes cluster",
@@ -892,11 +887,6 @@ app.get("/api/health/cluster", async (c) => {
       503
     );
   }
-});
-
-// Add a simple health check endpoint
-app.get("/api/health", (c) => {
-  return c.text("OK");
 });
 
 app.get("/api/config/:companyCode", async (c) => {
@@ -1250,9 +1240,9 @@ async function deployTenantInBackground(companyCode: string) {
           `ingress.kubernetes.hostname=${backendApiHost}`,
           "--set",
           "ingress.kubernetes.path=/",
-          // Inject certificate annotation via --set
+          // Revert to direct key setting with escaped dots
           "--set",
-          `ingress.kubernetes.annotations.['networking\.gke\.io/managed-certificates']=${backendCertName}`
+          `ingress.kubernetes.annotations.networking\.gke\.io/managed-certificates=${backendCertName}`
         );
       } else {
         // Kind (Traefik)
@@ -1377,9 +1367,9 @@ async function deployTenantInBackground(companyCode: string) {
           "ingress.kubernetes.enabled=true",
           "--set",
           `ingress.kubernetes.hostname=${frontendHost}`,
-          // Inject certificate annotation via --set
+          // Revert to direct key setting with escaped dots
           "--set",
-          `ingress.kubernetes.annotations.['networking\.gke\.io/managed-certificates']=${frontendCertName}`
+          `ingress.kubernetes.annotations.networking\.gke\.io/managed-certificates=${frontendCertName}`
         );
       } else {
         // Kind (Traefik)
@@ -1390,7 +1380,10 @@ async function deployTenantInBackground(companyCode: string) {
           "--set",
           "ingressRoute.enabled=true", // Verify this path in user-frontend values/template if needed
           "--set",
-          `ingressRoute.host=${frontendHost}` // Verify this path
+          `ingressRoute.host=${frontendHost}`, // Verify this path
+          // Revert to direct key setting with escaped dots
+          "--set",
+          `ingressRoute.annotations.networking\.gke\.io/managed-certificates=${frontendCertName}`
         );
       }
       // --- END RESTORED frontend args ---

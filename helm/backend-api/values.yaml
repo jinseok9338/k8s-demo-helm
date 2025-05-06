@@ -67,22 +67,24 @@ service:
 
 # --- Ingress Configuration ---
 ingress:
-  type: "kubernetes" # Default
+  # type can be 'traefik' or 'kubernetes'
+  type: traefik
 
   # --- Settings for Standard Kubernetes Ingress ---
   kubernetes:
-    enabled: true
+    enabled: false # Default to false for general values
     className: ""
-    annotations: {}
-    hostname: "api.example.com" # OVERRIDDEN by master-backend
+    hostname: ""
     path: "/"
     pathType: Prefix
-    tls: []
+    annotations: {} # Define as empty map
+    # tls: []
 
   # --- Settings for Traefik ---
   traefik:
     ingressRoute:
       enabled: true
+      # host is typically set via --set
       host: "api.localhost" # OVERRIDDEN by master-backend
       # pathPrefix: "/" # Or remove if not needed for root API
     middleware:

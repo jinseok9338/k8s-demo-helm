@@ -43,13 +43,13 @@ spec:
           # Add liveness and readiness probes
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: /api/health/cluster
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: /api/health/cluster
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -71,6 +71,15 @@ spec:
             {{- if .Values.env.KUBERNETES_ENV }}
             - name: KUBERNETES_ENV
               value: {{ .Values.env.KUBERNETES_ENV | quote }}
+            {{- end }}
+            # Add Tenant Image Paths from values - NEW
+            {{- if .Values.env.TENANT_BACKEND_IMAGE }}
+            - name: TENANT_BACKEND_IMAGE
+              value: {{ .Values.env.TENANT_BACKEND_IMAGE | quote }}
+            {{- end }}
+            {{- if .Values.env.TENANT_FRONTEND_IMAGE }}
+            - name: TENANT_FRONTEND_IMAGE
+              value: {{ .Values.env.TENANT_FRONTEND_IMAGE | quote }}
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
