@@ -4,15 +4,22 @@
 env:
   KUBERNETES_ENV: "gke"
 
-image:
-  repository: asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/master-backend # Updated Artifact Registry path
-  tag: "0.1.8" # RESTORED tag
+# GKE specific values for master-backend
 
+# Override the environment type
+environmentType: "gke"
+
+# Override Master Backend image to use Artifact Registry
+image:
+  repository: asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/master-backend # Replace with your actual AR path
+  tag: "0.1.8" # Replace with the actual tag pushed to AR (e.g., from 6-BuildAndPushImages.sh)
+  pullPolicy: IfNotPresent # Or Always
+
+# Service Account annotations for Workload Identity
 serviceAccount:
   create: true
-  # Add annotation to link KSA to GSA for Workload Identity
   annotations:
-    # Updated with actual project ID
+    # Replace YOUR_PROJECT_ID with your actual project ID
     iam.gke.io/gcp-service-account: master-backend-sa@nth-circlet-458901-h9.iam.gserviceaccount.com
 
 # Configuration for connecting to Cloud SQL via manually created secret
@@ -25,3 +32,37 @@ config:
 # RBAC is also needed for tenant management in GKE (in-cluster permissions)
 rbac:
   create: true
+
+# Ingress configuration for GKE using standard Kubernetes Ingress
+ingress:
+  type: "kubernetes"
+  kubernetes:
+    enabled: true
+    # className: "gce" # Usually default, uncomment if needed
+    hostname: "master.jinseok9338.info" # Replace with your desired GKE hostname for master frontend/backend API
+    annotations:
+      # Example: Use Google-managed SSL certificate
+      networking.gke.io/managed-certificates: master-cert # Name of the ManagedCertificate resource
+      # Example: Use a static IP
+      # kubernetes.io/ingress.global-static-ip-name: master-static-ip
+    # Paths: Assumes master-frontend chart handles frontend path "/" and proxies /api to master-backend service
+    # If master-backend needs direct ingress rule (e.g. for /api), define here:
+    # paths:
+    #   - path: "/api"
+    #     pathType: Prefix
+    #     # Backend service is automatically determined by Helm
+
+# Tenant Image Paths for GKE (to be injected as env vars)
+tenantImages:
+  # Replace with the actual AR paths and tags for tenant images
+  backend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/backend-api-poc:0.1.0" # Check tag used in 6-BuildAndPushImages.sh
+  frontend: "asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/front-end-user:v0.2.0" # Check tag for frontend user
+
+# Database secret name (should match the one created in script 7)
+databaseSecretName: "master-db-secret"
+# Disable default DB connection values if not needed (as DATABASE_URL secret is used)
+# db: {} # Or remove specific keys if causing issues
+
+# Disable migration job image override if it should use the main 'image' defined above
+# migrationJob:
+#   image: {}

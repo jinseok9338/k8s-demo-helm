@@ -183,48 +183,48 @@ This phase uses the Helm charts (`helm/master-backend` and `helm/master-frontend
       - **`helm/master-backend/values.yaml` (or `values-gke.yaml`):**
         Ensure these values are set:
 
-        ```yaml
-        image:
-          repository: YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/master-apps-repo/master-backend # Replace with your Artifact Registry path
-          tag: 0.1.7 # Use the tag pushed to Artifact Registry
-          pullPolicy: IfNotPresent
+      ```yaml
+      image:
+        repository: YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/master-apps-repo/master-backend # Replace with your Artifact Registry path
+        tag: 0.1.7 # Use the tag pushed to Artifact Registry
+        pullPolicy: IfNotPresent
 
-        serviceAccount:
-          create: true # Let Helm create the KSA
-          # Add annotation to link KSA to GSA for Workload Identity
-          annotations:
-            # Replace YOUR_PROJECT_ID with your actual project ID
-            iam.gke.io/gcp-service-account: master-backend-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+      serviceAccount:
+        create: true # Let Helm create the KSA
+        # Add annotation to link KSA to GSA for Workload Identity
+        annotations:
+          # Replace YOUR_PROJECT_ID with your actual project ID
+        iam.gke.io/gcp-service-account: master-backend-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
-        # If your chart has logic to create a DB secret, disable it
-        secret:
-          create: false
+      # If your chart has logic to create a DB secret, disable it
+      secret:
+        create: false
 
-        config:
-          # Tell the deployment template how to find the DATABASE_URL
-          # Option 1: If template directly uses config.database.secretName/secretKey
-          database:
-            secretName: master-db-secret # Name of the secret created above
-            secretKey: DATABASE_URL # Key within the secret
-            url: "" # Ensure template doesn't use this if secretName is set
-          # Option 2: If template expects the secret name in a specific env var
-          # database:
-          #   existingSecret: master-db-secret # Reference the secret
+      config:
+        # Tell the deployment template how to find the DATABASE_URL
+        # Option 1: If template directly uses config.database.secretName/secretKey
+        database:
+          secretName: master-db-secret # Name of the secret created above
+          secretKey: DATABASE_URL # Key within the secret
+          url: "" # Ensure template doesn't use this if secretName is set
+        # Option 2: If template expects the secret name in a specific env var
+        # database:
+        #   existingSecret: master-db-secret # Reference the secret
 
-          port: 3001 # Ensure this matches the application port
+        port: 3001 # Ensure this matches the application port
 
-        # RBAC should be enabled for tenant management (in-cluster permissions)
-        rbac:
-          create: true
-        ```
+      # RBAC should be enabled for tenant management (in-cluster permissions)
+      rbac:
+        create: true
+      ```
 
-        **Important:** Verify your `helm/master-backend/templates/deployment.yaml`. Ensure the `DATABASE_URL` environment variable for the backend container is populated correctly using the `master-db-secret`. It should look something like this:
+      **Important:** Verify your `helm/master-backend/templates/deployment.yaml`. Ensure the `DATABASE_URL` environment variable for the backend container is populated correctly using the `master-db-secret`. It should look something like this:
 
-        ```yaml
+    ````yaml
         env:
           - name: DATABASE_URL
-            valueFrom:
-              secretKeyRef:
+                  valueFrom:
+                    secretKeyRef:
                 # Reference the secret name from values.yaml
                 name:
                   {
@@ -242,7 +242,7 @@ This phase uses the Helm charts (`helm/master-backend` and `helm/master-frontend
       - **`helm/master-frontend/values.yaml` (or `values-gke.yaml`):**
         Ensure these values are set:
 
-        ```yaml
+    ```yaml
         image:
           repository: YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/master-apps-repo/master-frontend # Replace with your Artifact Registry path
           tag: 0.1.1 # Use the tag pushed to Artifact Registry
@@ -288,6 +288,8 @@ This phase uses the Helm charts (`helm/master-backend` and `helm/master-frontend
           releaseNameOverride: master-backend-release # Assumed release name for backend
           chartNameOverride: master-backend # Assumed chart name for backend (often matches directory name)
         ```
+
+    ````
 
 4.  **Deploy Master Backend with Helm:** Deploy the chart using the configured values.
 

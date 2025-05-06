@@ -1,0 +1,43 @@
+# GKE specific values for master-frontend
+
+# Override Master Frontend image to use Artifact Registry
+image:
+  repository: asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/master-frontend # Replace with your actual AR path
+  tag: "0.1.1" # Replace with the actual tag pushed to AR (e.g., from 6-BuildAndPushImages.sh)
+  pullPolicy: IfNotPresent # Or Always
+
+# Ingress configuration for GKE using standard Kubernetes Ingress
+ingress:
+  type: "kubernetes"
+  kubernetes:
+    enabled: true
+    # className: "gce" # Usually default, uncomment if needed
+    hostname: "master.jinseok9338.info" # MUST match the hostname used in master-backend for API proxying
+    annotations:
+      # Example: Use Google-managed SSL certificate (use the same one as backend)
+      networking.gke.io/managed-certificates: master-cert
+      # Example: Use a static IP (use the same one as backend)
+      # kubernetes.io/ingress.global-static-ip-name: master-static-ip
+    # Define paths - frontend serves root, potentially proxies /api
+    # This depends on how the ingress controller and frontend (e.g., Nginx) are configured.
+    # Option A: Simple root path for frontend assets
+    paths:
+      - path: "/"
+        pathType: Prefix
+        # Backend service name/port will be derived by Helm for the frontend service
+    # Option B: Define explicit proxy path (if not handled by Nginx config)
+    # paths:
+    #   - path: "/"
+    #     pathType: Prefix
+    #     # backend: Service for frontend pods
+    #   - path: "/api/*" # Or /api/?*
+    #     pathType: Prefix # Or ImplementationSpecific
+    #     backend:
+    #       service:
+    #         name: master-backend-release # Helm release name of the master-backend
+    #         port:
+    #           name: http # Or number: 3001
+# Service account - Typically frontend doesn't need special Workload Identity
+# serviceAccount:
+#   create: true
+#   annotations: {}
