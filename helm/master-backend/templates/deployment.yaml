@@ -61,10 +61,9 @@ spec:
               # Example using a Secret (recommended):
               valueFrom:
                 secretKeyRef:
-                  # Assumes you have a secret named 'master-backend-secrets'
-                  # with a key 'DATABASE_URL'
-                  name: {{ include "master-backend.fullname" . }}-secrets
-                  key: DATABASE_URL
+                  # Use the secret name defined in values (defaulting to master-db-secret)
+                  name: {{ .Values.databaseSecretName | default "master-db-secret" }}
+                  key: DATABASE_URL # The key within the secret
             # Add other environment variables your application needs
             - name: PORT
               value: {{ .Values.service.targetPort | quote }}

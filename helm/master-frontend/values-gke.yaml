@@ -16,8 +16,8 @@ ingress:
     annotations:
       # Example: Use Google-managed SSL certificate (use the same one as backend)
       networking.gke.io/managed-certificates: master-cert
-      # Example: Use a static IP (use the same one as backend)
-      # kubernetes.io/ingress.global-static-ip-name: master-static-ip
+      # Use the reserved static IP address
+      kubernetes.io/ingress.global-static-ip-name: master-static-ip
     # Define paths - frontend serves root, potentially proxies /api
     # This depends on how the ingress controller and frontend (e.g., Nginx) are configured.
     # Option A: Simple root path for frontend assets

@@ -15,7 +15,7 @@ DATABASE_NAME="master_db"
 DB_USER="postgres"
 # IMPORTANT: Retrieve the actual password securely. Avoid hardcoding.
 # This script assumes you will provide the password when prompted.
-# DB_PASSWORD="VERY_STRONG_PASSWORD_CHANGE_ME"
+DB_PASSWORD="VERY_STRONG_PASSWORD_CHANGE_ME"
 NAMESPACE="master"
 SECRET_NAME="master-db-secret"
 SECRET_KEY="DATABASE_URL"
