@@ -65,32 +65,29 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 3000
 
-# IngressRoute settings for Traefik
-ingressRoute:
-  enabled: true # Disabled for local testing via port-forward
-  # Path prefix for backend API routes
-  # pathPrefix: /api # No longer needed
-  # Middleware to strip the prefix before forwarding to the service
-  # stripPrefix: true # No longer needed
-
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# --- Ingress Configuration ---
 ingress:
-  enabled: true # Keep it enabled conceptually, route created above
-  host: api.localhost # Default host, override per tenant
-  className: ""
-  annotations:
-    {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  type: "kubernetes" # Default
+
+  # --- Settings for Standard Kubernetes Ingress ---
+  kubernetes:
+    enabled: true
+    className: ""
+    annotations: {}
+    hostname: "api.example.com" # OVERRIDDEN by master-backend
+    path: "/"
+    pathType: Prefix
+    tls: []
+
+  # --- Settings for Traefik ---
+  traefik:
+    ingressRoute:
+      enabled: true
+      host: "api.localhost" # OVERRIDDEN by master-backend
+      # pathPrefix: "/" # Or remove if not needed for root API
+    middleware:
+      stripPrefix:
+        enabled: false # Assuming API serves from root
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

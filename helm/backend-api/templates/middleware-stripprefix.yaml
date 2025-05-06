@@ -1,12 +1,13 @@
 # Only create Middleware if enabled in values
-{{- if .Values.middleware.stripPrefix.enabled -}}
+{{- if eq .Values.ingress.type "traefik" -}}
+{{- if .Values.ingress.traefik.middleware.stripPrefix.enabled -}}
 ---
 
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   # Generate a unique name, e.g., backend-dir-backend-api-stripprefix-api
-  name: {{ include "backend-api.fullname" . }}-stripprefix-api 
+  name: {{ printf "%s-stripprefix-api" (include "backend-api.fullname" .) }}
   namespace: {{ .Release.Namespace }}
   labels:
     # Include standard Helm labels
@@ -14,5 +15,7 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /api
-{{- end }} 
+      # Use the pathPrefix defined for the IngressRoute, default to /api if not set
+      - {{ .Values.ingress.traefik.ingressRoute.pathPrefix | default "/api" }}
+{{- end -}}
+{{- end -}} 

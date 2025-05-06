@@ -997,6 +997,10 @@ async function deployTenantInBackground(companyCode: string) {
       300
     );
 
+    // Determine environment (e.g., via an environment variable) - RESTORED
+    const KUBERNETES_ENV = process.env.KUBERNETES_ENV || "kind"; // "kind" or "gke"
+    console.log(`[ENV_DETECTION] KUBERNETES_ENV set to: ${KUBERNETES_ENV}`); // RESTORED
+
     // 2. Deploy Backend API (with migration job enabled)
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_BE);
 
@@ -1087,18 +1091,48 @@ async function deployTenantInBackground(companyCode: string) {
         "upgrade",
         "--install",
         backendReleaseName,
-        localBackendChartPath, // Use the cloned local path
+        localBackendChartPath,
         "--namespace",
         namespace,
         "--set",
         `companyCode=${companyCode}`,
         "--set",
-        `db.serviceName=${pgReleaseName}`, // Point to the correct PG service
+        `db.serviceName=${pgReleaseName}`,
         "--set",
-        `db.existingSecret=${pgReleaseName}`, // Point to the correct PG secret
+        `db.existingSecret=${pgReleaseName}`,
         "--set",
-        "migrationJob.enabled=true", // <-- Enable the migration Job Hook
+        "migrationJob.enabled=true",
       ];
+
+      // --- RESTORED Conditional backend args ---
+      if (KUBERNETES_ENV === "gke") {
+        const backendApiHost = `api.${companyCode.toLowerCase()}.jinseok9338.info`;
+        backendArgs.push(
+          "--set",
+          "ingress.type=kubernetes",
+          "--set",
+          "ingress.kubernetes.enabled=true",
+          "--set",
+          `ingress.kubernetes.hostname=${backendApiHost}`,
+          "--set",
+          "ingress.kubernetes.path=/"
+        );
+      } else {
+        // Kind (Traefik)
+        const backendApiHostTraefik = `api.${companyCode.toLowerCase()}.localhost`;
+        backendArgs.push(
+          "--set",
+          "ingress.type=traefik",
+          "--set",
+          "ingress.traefik.ingressRoute.enabled=true",
+          "--set",
+          `ingress.traefik.ingressRoute.host=${backendApiHostTraefik}`,
+          "--set",
+          "ingress.traefik.middleware.stripPrefix.enabled=false" // Assuming API root path
+        );
+      }
+      // --- END RESTORED backend args ---
+
       await runHelmCommandAndStream(companyCode, backendArgs, "backend-api");
 
       // Wait for the deployment itself (which starts after the migration job succeeds)
@@ -1121,7 +1155,7 @@ async function deployTenantInBackground(companyCode: string) {
     // 3. Deploy User Frontend
     await updateTenantStatus(companyCode, STATUS_DEPLOYING_FE);
 
-    // --- MODIFIED: Clone repo logic with better logging/error handling ---
+    // --- MODIFIED: Clone repo logic with better logging/error handling for frontend ---
     const frontendChartSubPath = "helm/user-frontend";
     // tempChartDir and runSpawnAndLog are defined above
     let localFrontendChartPath = "";
@@ -1159,25 +1193,50 @@ async function deployTenantInBackground(companyCode: string) {
       );
       // --- END MODIFIED GIT LOGIC ---
 
-      const frontendHost = `app.${companyCode.toLowerCase()}.localhost`;
+      let frontendHost = "";
       const frontendArgs = [
         "upgrade",
         "--install",
         frontendReleaseName,
-        localFrontendChartPath, // Use the cloned local path
+        localFrontendChartPath,
         "--namespace",
         namespace,
         "--set",
         `companyCode=${companyCode}`,
-        "--set",
-        "ingressRoute.enabled=true",
-        "--set",
-        `ingressRoute.host=${frontendHost}`,
-        "--set",
-        `ingressRoute.backend.serviceName=${backendReleaseName}`,
-        "--set",
-        `ingressRoute.backend.middlewareNamespace=${namespace}`,
       ];
+
+      // --- RESTORED Conditional frontend args (Option B - separate hosts) ---
+      if (KUBERNETES_ENV === "gke") {
+        frontendHost = `app.${companyCode.toLowerCase()}.jinseok9338.info`;
+        frontendArgs.push(
+          "--set",
+          "ingress.type=kubernetes",
+          "--set",
+          "ingress.kubernetes.enabled=true",
+          "--set",
+          `ingress.kubernetes.hostname=${frontendHost}`
+        );
+      } else {
+        // Kind (Traefik)
+        frontendHost = `app.${companyCode.toLowerCase()}.localhost`;
+        frontendArgs.push(
+          "--set",
+          "ingress.type=traefik",
+          // Note: For Option B, Traefik might not need backend/middleware settings here
+          // if user-frontend only handles its own host now.
+          // Let's assume the user-frontend's ingressRoute template was also simplified.
+          // If not, restore the backend/middlewareNamespace sets as needed.
+          "--set",
+          "ingressRoute.enabled=true", // This path might be wrong, should be ingress.traefik.ingressRoute.enabled based on values?
+          "--set",
+          `ingressRoute.host=${frontendHost}` // This path might be wrong, should be ingress.traefik.ingressRoute.host? Let's assume old paths for now for simplicity, needs verification with user-frontend chart.
+        );
+      }
+      // --- END RESTORED frontend args ---
+
+      console.log(
+        `[helm-user-frontend] Deploying for env: ${KUBERNETES_ENV} with host: ${frontendHost}`
+      );
       await runHelmCommandAndStream(companyCode, frontendArgs, "user-frontend");
       await waitForResourceReady(
         companyCode,

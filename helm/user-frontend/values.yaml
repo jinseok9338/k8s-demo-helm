@@ -5,6 +5,38 @@
 # Company Code (tenant identifier), to be set during deployment
 companyCode: "" # No longer needed for ingressRoute
 
+# --- Ingress Configuration --- RESTORED
+ingress:
+  # Type of Ingress to create: "kubernetes" or "traefik"
+  type: "kubernetes" # Default to Kubernetes standard Ingress
+
+  # --- Settings for Standard Kubernetes Ingress (when ingress.type is "kubernetes") --- RESTORED
+  kubernetes:
+    enabled: true
+    className: ""
+    annotations: {}
+    hostname: "user.example.com" # OVERRIDDEN by master-backend
+    path: "/" # Default path for frontend
+    pathType: Prefix
+    # Removed apiPath, apiBackendServiceName, apiBackendServicePort as per Option B
+    paths:
+      - path: "/"
+        pathType: Prefix
+    tls: []
+
+  # --- Settings for Traefik IngressRoute (when ingress.type is "traefik") --- RESTORED
+  traefik:
+    ingressRoute:
+      enabled: true
+      host: "app.user.localhost" # OVERRIDDEN by master-backend
+      entryPoints: ["web"]
+      # For Option B, user-frontend IngressRoute usually doesn't need backend/middleware settings
+    # backend:
+    #   serviceName: "backend-api"
+    #   port: 3000
+    #   middlewareName: "backend-api-stripprefix-api"
+    #   middlewareNamespace: "needs-dynamic-value"
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2
 
@@ -71,34 +103,34 @@ service:
 #   enabled: false # Previous setting
 
 # --- NEW: IngressRoute Configuration ---
-ingressRoute:
-  # Set to true during helm install/upgrade to create the IngressRoute
-  enabled: true
-
-  # Hostname for this tenant, e.g., app.dir.localhost or app.cha.localhost
-  # MUST be set during helm install/upgrade
-  host: "app.dir.localhost"
-
-  # Traefik entrypoints to use (usually ["web"] for HTTP)
-  entryPoints:
-    - web
-
-  # Configuration for routing /api requests to the backend
-  backend:
-    # Name of the backend-api service (e.g., backend-dir-backend-api)
-    # MUST be set during helm install/upgrade
-    serviceName: "backend-api"
-
-    # Port of the backend-api service
-    port: 3000
-
-    # Name of the StripPrefix Middleware created by the backend-api chart
-    # (e.g., backend-dir-backend-api-stripprefix-api)
-    # MUST be set during helm install/upgrade
-    middlewareName: "backend-api-stripprefix-api"
-
-    # Namespace where the Middleware exists (optional, defaults to current namespace)
-    middlewareNamespace: "dir-tenant"
+# ingressRoute:
+#   # Set to true during helm install/upgrade to create the IngressRoute
+#   enabled: true
+#
+#   # Hostname for this tenant, e.g., app.dir.localhost or app.cha.localhost
+#   # MUST be set during helm install/upgrade
+#   host: "app.dir.localhost"
+#
+#   # Traefik entrypoints to use (usually ["web"] for HTTP)
+#   entryPoints:
+#     - web
+#
+#   # Configuration for routing /api requests to the backend
+#   backend:
+#     # Name of the backend-api service (e.g., backend-dir-backend-api)
+#     # MUST be set during helm install/upgrade
+#     serviceName: "backend-api"
+#
+#     # Port of the backend-api service
+#     port: 3000
+#
+#     # Name of the StripPrefix Middleware created by the backend-api chart
+#     # (e.g., backend-dir-backend-api-stripprefix-api)
+#     # MUST be set during helm install/upgrade
+#     middlewareName: "backend-api-stripprefix-api"
+#
+#     # Namespace where the Middleware exists (optional, defaults to current namespace)
+#     middlewareNamespace: "dir-tenant"
 # --- End NEW ---
 
 # Explicitly define the update strategy

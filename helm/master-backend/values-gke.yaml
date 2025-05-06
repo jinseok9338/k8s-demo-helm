@@ -1,0 +1,27 @@
+# Values for GKE environment
+
+# Add an env section for environment variables - RESTORED
+env:
+  KUBERNETES_ENV: "gke"
+
+image:
+  repository: asia-northeast3-docker.pkg.dev/nth-circlet-458901-h9/master-apps-repo/master-backend # Updated Artifact Registry path
+  tag: "0.1.8" # RESTORED tag
+
+serviceAccount:
+  create: true
+  # Add annotation to link KSA to GSA for Workload Identity
+  annotations:
+    # Updated with actual project ID
+    iam.gke.io/gcp-service-account: master-backend-sa@nth-circlet-458901-h9.iam.gserviceaccount.com
+
+# Configuration for connecting to Cloud SQL via manually created secret
+config:
+  database:
+    url: "" # URL is provided by the secret, so leave this empty
+    secretName: master-db-secret # Name of the manually created secret
+    secretKey: DATABASE_URL # Key within the secret containing the DB URL
+
+# RBAC is also needed for tenant management in GKE (in-cluster permissions)
+rbac:
+  create: true

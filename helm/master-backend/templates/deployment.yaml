@@ -68,6 +68,11 @@ spec:
             # Add other environment variables your application needs
             - name: PORT
               value: {{ .Values.service.targetPort | quote }}
+            # Add KUBERNETES_ENV from values - RESTORED
+            {{- if .Values.env.KUBERNETES_ENV }}
+            - name: KUBERNETES_ENV
+              value: {{ .Values.env.KUBERNETES_ENV | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

@@ -1,4 +1,5 @@
-{{- if .Values.ingressRoute.enabled -}}
+{{- if eq .Values.ingress.type "traefik" -}}
+{{- if .Values.ingress.traefik.ingressRoute.enabled -}}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -8,28 +9,22 @@ metadata:
     {{- include "backend-api.labels" . | nindent 4 }}
 spec:
   entryPoints:
-    - web
+    {{- range .Values.ingress.traefik.ingressRoute.entryPoints | default (list "web") }}
+    - {{ . }}
+    {{- end }}
   routes:
-    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/api`)
+    - match: Host(`{{ required "ingress.traefik.ingressRoute.host must be set" .Values.ingress.traefik.ingressRoute.host }}`) 
+      {{- if .Values.ingress.traefik.ingressRoute.pathPrefix }} # Optional path prefix
+      && PathPrefix(`{{ .Values.ingress.traefik.ingressRoute.pathPrefix }}`)
+      {{- end }}
       kind: Rule
       services:
         - name: {{ include "backend-api.fullname" . }}
           port: {{ .Values.service.port }}
-      # Optional: Add middleware if needed, e.g., for stripping prefix if your app doesn't handle /api
-      # middlewares:
-      #   - name: {{ include "backend-api.fullname" . }}-stripprefix # Needs a corresponding Middleware object
-
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: {{ include "backend-api.fullname" . }}-strip-prefix
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "backend-api.labels" . | nindent 4 }}
-spec:
-  stripPrefix:
-    prefixes:
-      - /{{ .Values.companyCode | lower }}/api
-    # forceSlash: false
+      {{- if .Values.ingress.traefik.middleware.stripPrefix.enabled }} # Optional Middleware
+      middlewares:
+        - name: {{ printf "%s-stripprefix-api" (include "backend-api.fullname" .) }}
+          namespace: {{ .Release.Namespace }}
+      {{- end }}
+{{- end }}
 {{- end }} 

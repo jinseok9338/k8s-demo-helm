@@ -1,5 +1,6 @@
-{{- if .Values.ingressRoute.enabled -}}
-
+{{- if eq .Values.ingress.type "traefik" -}}
+{{- /* Assuming .Values.ingress.traefik.ingressRoute.enabled exists from values.yaml */}}
+{{- if .Values.ingress.traefik.ingressRoute.enabled -}}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -12,22 +13,16 @@ metadata:
 spec:
   entryPoints:
     # Use entrypoints defined in values, default to 'web'
-    {{- range .Values.ingressRoute.entryPoints | default (list "web") }}
+    {{- range .Values.ingress.traefik.ingressRoute.entryPoints | default (list "web") }}
     - {{ . }}
     {{- end }}
   routes:
-    # Route for Backend API (/api)
-    - match: Host(`{{ required "ingressRoute.host must be set" .Values.ingressRoute.host }}`) && PathPrefix(`/api`)
-      kind: Rule
-      services:
-        - name: {{ required "ingressRoute.backend.serviceName must be set" .Values.ingressRoute.backend.serviceName }}
-          port: {{ .Values.ingressRoute.backend.port | default 3000 }}
-
     # Route for Frontend (everything else - must be last rule for the host)
-    - match: Host(`{{ .Values.ingressRoute.host }}`) && PathPrefix(`/`)
+    - match: Host(`{{ required "ingress.traefik.ingressRoute.host is required" .Values.ingress.traefik.ingressRoute.host }}`) && PathPrefix(`/`)
       kind: Rule
       services:
         # Reference the frontend service defined in this chart
         - name: {{ include "user-frontend.fullname" . }}
           port: {{ .Values.service.port | default 80 }}
+{{- end }}
 {{- end }}
